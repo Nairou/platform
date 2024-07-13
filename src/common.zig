@@ -1,7 +1,11 @@
 const std = @import("std");
 
 pub const PlatformError = error{
+    CantCreateBuffer,
+    CantCreatePool,
     FailedToConnect,
+    ShmFileError,
+    ShmFileExists,
     UnsupportedDisplay,
 };
 

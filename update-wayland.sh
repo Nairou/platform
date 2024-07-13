@@ -45,7 +45,7 @@ generate_wayland_protocol() {
     out_name=$2
 
     wayland-scanner client-header "$xml" "src/wayland/$out_name-client-protocol.h"
-    wayland-scanner private-code "$xml" "src/wayland/$out_name-client-protocol-code.h"
+    wayland-scanner private-code "$xml" "src/wayland/$out_name-protocol.c"
 }
 
 generate_wayland_protocol _wayland/protocol/wayland.xml wayland

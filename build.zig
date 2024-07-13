@@ -11,6 +11,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib.addIncludePath(b.path("src/wayland"));
+    lib.addCSourceFiles(.{
+        .files = &protocol_sources,
+    });
     lib.linkLibC();
     lib.linkSystemLibrary("wayland-client");
 
@@ -22,6 +25,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib_tests.addIncludePath(b.path("src/wayland"));
+    lib_tests.addCSourceFiles(.{
+        .files = &protocol_sources,
+    });
     lib_tests.linkLibC();
     lib_tests.linkSystemLibrary("wayland-client");
 
@@ -30,3 +36,8 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
 }
+
+const protocol_sources = [_][]const u8{
+    "src/wayland/wayland-protocol.c",
+    "src/wayland/xdg-shell-protocol.c",
+};
