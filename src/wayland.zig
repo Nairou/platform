@@ -14,6 +14,7 @@ const global = struct {
     pub var xdgBase: *c.xdg_wm_base = undefined;
 
     // Objects (wait for window?)
+    pub var shouldClose: bool = false;
     pub var width: i32 = 200;
     pub var height: i32 = 100;
     pub var surface: ?*c.wl_surface = undefined;
@@ -50,6 +51,7 @@ fn init(allocator: std.mem.Allocator) common.PlatformError!void {
     global.xdgSurface = c.xdg_wm_base_get_xdg_surface(global.xdgBase, global.surface) orelse return error.FailedToConnect;
     _ = c.xdg_surface_add_listener(global.xdgSurface, &xdgSurfaceListener, null);
     global.xdgTopLevel = c.xdg_surface_get_toplevel(global.xdgSurface) orelse return error.FailedToConnect;
+    _ = c.xdg_toplevel_add_listener(global.xdgTopLevel, &xdgToplevelListener, null);
     c.xdg_toplevel_set_app_id(global.xdgTopLevel, "platform");
     c.xdg_toplevel_set_title(global.xdgTopLevel, "Sample Title");
     c.wl_surface_commit(global.surface);
@@ -149,6 +151,11 @@ const xdgSurfaceListener = c.xdg_surface_listener{
     .configure = xdgSurfaceConfigure,
 };
 
+const xdgToplevelListener = c.xdg_toplevel_listener{
+    .close = xdgToplevelClose,
+    .configure = xdgToplevelConfigure,
+};
+
 const frameListener = c.wl_callback_listener{
     .done = frameDone,
 };
@@ -206,6 +213,31 @@ fn xdgSurfaceConfigure(data: ?*anyopaque, xdgSurface: ?*c.xdg_surface, serial: u
     std.log.warn("3", .{});
     c.wl_surface_commit(global.surface);
     std.log.warn("configure done", .{});
+}
+
+fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.C) void {
+    _ = data;
+    _ = xdgToplevel;
+
+    global.shouldClose = true;
+}
+
+fn xdgToplevelConfigure(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel, width: i32, height: i32, states: [*c]c.wl_array) callconv(.C) void {
+    _ = data;
+    _ = xdgToplevel;
+    _ = states;
+
+    if (width != 0 and height != 0) {
+        global.width = width;
+        global.height = height;
+
+        destroyBuffer() catch |e| {
+            std.log.warn("destroyBuffer error: {}", .{e});
+        };
+        createBuffer() catch |e| {
+            std.log.warn("createBuffer error: {}", .{e});
+        };
+    }
 }
 
 fn frameDone(data: ?*anyopaque, callback: ?*c.wl_callback, time: u32) callconv(.C) void {
