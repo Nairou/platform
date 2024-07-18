@@ -9,10 +9,14 @@ pkgs.mkShell {
   ];
 
   packages = with pkgs; [
+    autoconf
+    automake
     gdb
+    gnumake
+    python3
     #libglvnd.dev
+    libxkbcommon.dev
     wayland-scanner.dev
-    #libxkbcommon.dev
     #xorg.libX11
     #xorg.libxcb
     #xorg.xorgproto
@@ -20,7 +24,8 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
-    zig version
+    # Doesn't work with lorri
+    echo Zig $(zig version)
     '';
 }
 

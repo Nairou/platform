@@ -6,9 +6,11 @@ pub const PlatformError = error{
     FailedToConnect,
     ShmFileError,
     ShmFileExists,
+    ShmMapError,
     UnsupportedDisplay,
 };
 
 pub const Platform = struct {
     init: *const fn (allocator: std.mem.Allocator) PlatformError!void,
+    deinit: *const fn () void,
 };

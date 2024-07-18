@@ -11,11 +11,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib.addIncludePath(b.path("src/wayland"));
+    lib.addIncludePath(b.path("src/x11"));
     lib.addCSourceFiles(.{
         .files = &protocol_sources,
     });
     lib.linkLibC();
     lib.linkSystemLibrary("wayland-client");
+    lib.linkSystemLibrary("xkbcommon");
 
     b.installArtifact(lib);
 
@@ -24,17 +26,24 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    //lib_tests.linkLibrary(lib);
     lib_tests.addIncludePath(b.path("src/wayland"));
+    lib_tests.addIncludePath(b.path("src/x11"));
     lib_tests.addCSourceFiles(.{
         .files = &protocol_sources,
     });
     lib_tests.linkLibC();
     lib_tests.linkSystemLibrary("wayland-client");
+    lib_tests.linkSystemLibrary("xkbcommon");
 
     const run_lib_unit_tests = b.addRunArtifact(lib_tests);
+    const install_lib_unit_tests = b.addInstallArtifact(lib_tests, .{});
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+
+    const testbin_step = b.step("test-bin", "Build unit tests into separate binary");
+    testbin_step.dependOn(&install_lib_unit_tests.step);
 }
 
 const protocol_sources = [_][]const u8{

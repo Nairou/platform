@@ -40,9 +40,14 @@ pub fn init(self: *Self, allocator: std.mem.Allocator) !void {
     try self.platform.init(allocator);
 }
 
+pub fn deinit(self: *Self) void {
+    self.platform.deinit();
+}
+
 test {
     std.testing.refAllDecls(@This());
 
     var lib = Self{};
     try lib.init(std.testing.allocator);
+    defer lib.deinit();
 }
