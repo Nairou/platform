@@ -1,26 +1,27 @@
 const std = @import("std");
-const common = @import("common.zig");
+const lib = @import("lib.zig");
+const gl = @import("zgl");
 const assert = std.debug.assert;
 
 pub const c = @cImport({
-    //@cDefine("GLFW_INCLUDE_NONE", "1");
     @cInclude("wayland-client-core.h");
     @cInclude("wayland-client-protocol.h");
     @cInclude("xdg-shell-client-protocol.h");
     @cInclude("xkbcommon/xkbcommon.h");
+    @cInclude("wayland-egl.h");
+    @cInclude("EGL/egl.h");
+    //@cDefine("EGL_EGLEXT_PROTOTYPES", {});
+    @cInclude("EGL/eglext.h");
 });
-
-pub const platform: common.Platform = .{
-    .init = init,
-    .deinit = deinit,
-};
 
 const global = struct {
     // Globals
     pub var display: *c.wl_display = undefined;
     pub var registry: *c.wl_registry = undefined;
     pub var compositor: *c.wl_compositor = undefined;
-    pub var shm: *c.wl_shm = undefined;
+    pub var eglDisplay: c.EGLDisplay = undefined;
+    pub var eglWindow: ?*c.wl_egl_window = null;
+    pub var eglSurface: c.EGLSurface = undefined;
     pub var xdgBase: *c.xdg_wm_base = undefined;
     pub var seat: *c.wl_seat = undefined;
     pub var seatCapabilities: struct {
@@ -42,31 +43,90 @@ const global = struct {
     pub var surface: ?*c.wl_surface = null;
     pub var xdgSurface: *c.xdg_surface = undefined;
     pub var xdgTopLevel: *c.xdg_toplevel = undefined;
-    pub var poolFile: c_int = undefined;
-    pub var pool: ?*c.wl_shm_pool = null;
-    pub var buffer: ?*c.wl_buffer = null;
-    pub var data: []align(std.mem.page_size) u8 = undefined;
 
     // Temporary testing
     pub var tempOffset: u32 = 0;
     pub var tempNextFrameTime: u32 = 0;
 };
 
-const Window = struct {
-    // ....
-};
-
-fn init(allocator: std.mem.Allocator) common.PlatformError!void {
+fn init(allocator: std.mem.Allocator) lib.PlatformError!void {
     _ = allocator;
 
     std.log.warn("init wayland", .{});
 
     global.display = c.wl_display_connect(null) orelse return error.FailedToConnect;
-    std.log.warn("Connection established!", .{});
     global.registry = c.wl_display_get_registry(global.display) orelse return error.FailedToConnect;
     _ = c.wl_registry_add_listener(global.registry, &registryListener, null);
     global.xkb.context = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS);
     _ = c.wl_display_roundtrip(global.display);
+
+    var eglExtPlatformBase: bool = false;
+    var eglExtPlatformWayland: bool = false;
+
+    const eglQueryString = c.eglQueryString(c.EGL_NO_DISPLAY, c.EGL_EXTENSIONS);
+    var it = std.mem.splitScalar(u8, std.mem.span(eglQueryString), ' ');
+    while (it.next()) |value| {
+        std.log.warn("eglQueryString value: '{s}'", .{value});
+        if (std.mem.eql(u8, value, "EGL_EXT_platform_base")) {
+            eglExtPlatformBase = true;
+        } else if (std.mem.eql(u8, value, "EGL_EXT_platform_wayland")) {
+            eglExtPlatformWayland = true;
+        }
+    }
+
+    if (eglExtPlatformBase and eglExtPlatformWayland) {
+        global.eglDisplay = c.eglGetPlatformDisplay(c.EGL_PLATFORM_WAYLAND_EXT, global.display, null);
+    } else {
+        global.eglDisplay = c.eglGetDisplay(global.display);
+    }
+    if (global.eglDisplay == c.EGL_NO_DISPLAY) {
+        return error.EglUnavailable;
+    }
+
+    var eglMajor: i32 = 0;
+    var eglMinor: i32 = 0;
+    if (c.eglInitialize(global.eglDisplay, &eglMajor, &eglMinor) == 0) {
+        return error.EglUnavailable;
+    }
+    std.log.warn("EGL version {d}.{d}", .{ eglMajor, eglMinor });
+    if (c.eglBindAPI(c.EGL_OPENGL_API) == 0) {
+        return error.EglUnavailable;
+    }
+
+    const eglConfigAttributes = [_]u32{
+        c.EGL_SURFACE_TYPE,
+        c.EGL_WINDOW_BIT,
+        c.EGL_RED_SIZE,
+        8,
+        c.EGL_GREEN_SIZE,
+        8,
+        c.EGL_BLUE_SIZE,
+        8,
+        c.EGL_CONFIG_CAVEAT,
+        c.EGL_NONE,
+        c.EGL_RENDERABLE_TYPE,
+        c.EGL_OPENGL_BIT,
+        c.EGL_NONE,
+    };
+    var configList: [100]c.EGLConfig = undefined;
+    var configCount: i32 = 0;
+    if (c.eglChooseConfig(global.eglDisplay, @ptrCast(&eglConfigAttributes), &configList, configList.len, &configCount) == 0) {
+        return error.EglUnavailable;
+    }
+    std.log.warn("EGL configs: count = {d}", .{configCount});
+
+    const eglContextAttributes = [_]u32{
+        c.EGL_CONTEXT_MAJOR_VERSION,
+        4,
+        c.EGL_CONTEXT_MINOR_VERSION,
+        5,
+        c.EGL_CONTEXT_OPENGL_PROFILE_MASK,
+        c.EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+        c.EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE,
+        c.EGL_TRUE,
+        c.EGL_NONE,
+    };
+    const eglContext = c.eglCreateContext(global.eglDisplay, configList[0], c.EGL_NO_CONTEXT, @ptrCast(&eglContextAttributes)) orelse return error.EglUnavailable;
 
     // Window
     {
@@ -82,24 +142,33 @@ fn init(allocator: std.mem.Allocator) common.PlatformError!void {
 
         const frameCallback = c.wl_surface_frame(global.surface);
         _ = c.wl_callback_add_listener(frameCallback, &frameListener, null);
+
+        global.eglWindow = c.wl_egl_window_create(global.surface, global.width, global.height) orelse return error.EglUnavailable;
+        global.eglSurface = c.eglCreatePlatformWindowSurface(global.eglDisplay, configList[0], global.eglWindow, null) orelse return error.EglUnavailable;
+        if (c.eglMakeCurrent(global.eglDisplay, global.eglSurface, global.eglSurface, eglContext) == 0) {
+            return error.EglUnavailable;
+        }
     }
 
-    while (c.wl_display_dispatch(global.display) != 0) {
-        if (global.shouldClose) {
-            std.log.warn("Should close", .{});
-            break;
-        }
+    gl.loadExtensions(void, glGetProcAddress) catch return error.CantLoadGlExtensions;
+
+    while (!global.shouldClose) {
+        _ = c.wl_display_dispatch(global.display);
+        draw() catch {};
+
+        _ = c.eglSwapBuffers(global.eglDisplay, global.eglSurface);
     }
 }
 
+pub fn glGetProcAddress(comptime _: type, proc: [:0]const u8) ?*const anyopaque {
+    return c.eglGetProcAddress(proc);
+}
+
+test "init" {
+    _ = try init(std.testing.allocator);
+}
+
 pub fn deinit() void {
-    // Window
-    {
-        destroyBuffer() catch {};
-    }
-
-    // Global
-
     c.xkb_keymap_unref(global.xkb.keymap);
     c.xkb_state_unref(global.xkb.state);
 
@@ -111,74 +180,14 @@ pub fn deinit() void {
     }
     c.wl_seat_release(global.seat);
     c.wl_surface_destroy(global.surface);
+    c.wl_egl_window_destroy(global.eglWindow);
+    c.eglTerminate(global.eglDisplay);
     c.wl_display_disconnect(global.display);
 }
 
-fn createBuffer() common.PlatformError!void {
-    std.log.warn("createBuffer", .{});
-    const stride = global.width * 4;
-    const poolSize = global.height * stride * 2;
-
-    var shmName: [100]u8 = undefined;
-    const prefix = "/platform-shm-";
-    std.mem.copyForwards(u8, &shmName, prefix);
-    const rngLen = 8;
-    for (0..100) |_| {
-        var currentTime = std.time.nanoTimestamp();
-        for (0..rngLen) |i| {
-            shmName[prefix.len + i] = 'A' + @as(u8, @intCast(currentTime & 15)) + @as(u8, @intCast(currentTime & 16)) * 2;
-            currentTime >>= 5;
-        }
-        shmName[prefix.len + rngLen] = 0;
-        std.log.warn("shm: '{s}'", .{shmName});
-        global.poolFile = std.c.shm_open(@ptrCast(&shmName), @bitCast(std.os.linux.O{ .ACCMODE = .RDWR, .CREAT = true, .EXCL = true }), 0o600);
-        if (global.poolFile >= 0) {
-            _ = std.c.shm_unlink(@ptrCast(&shmName));
-            break;
-        }
-    }
-    std.posix.ftruncate(global.poolFile, @intCast(poolSize)) catch return error.ShmFileError;
-
-    global.data = std.posix.mmap(null, @intCast(poolSize), std.posix.PROT.READ | std.posix.PROT.WRITE, @bitCast(std.posix.MAP{ .TYPE = .SHARED }), global.poolFile, 0) catch return error.ShmMapError;
-    global.pool = c.wl_shm_create_pool(global.shm, global.poolFile, poolSize);
-    const index = 0;
-    const offset = global.height * stride * index;
-    global.buffer = c.wl_shm_pool_create_buffer(global.pool, offset, global.width, global.height, stride, c.WL_SHM_FORMAT_ARGB8888);
-    _ = c.wl_buffer_add_listener(global.buffer, &bufferListener, null);
-    std.log.warn("createBuffer done", .{});
-}
-
-fn destroyBuffer() common.PlatformError!void {
-    std.log.warn("destroyBuffer", .{});
-    if (global.buffer != null) {
-        c.wl_buffer_destroy(global.buffer);
-    }
-    if (global.data.len > 0) {
-        std.posix.munmap(global.data);
-    }
-    if (global.poolFile >= 0) {
-        std.posix.close(global.poolFile);
-    }
-}
-
-fn draw() common.PlatformError!void {
-    const scrollOffset = global.tempOffset % 8;
-    for (0..@intCast(global.height)) |y| {
-        for (0..@intCast(global.width)) |x| {
-            const poolOffset = (y * @as(usize, @intCast(global.width)) + x) * 4;
-            if (((x + scrollOffset) + (y + scrollOffset) / 8 * 8) % 16 < 8) {
-                global.data[poolOffset + 0] = 0x0;
-                global.data[poolOffset + 1] = 0x0;
-                global.data[poolOffset + 2] = 0x0;
-                global.data[poolOffset + 3] = 0x0;
-            } else {
-                global.data[poolOffset + 0] = 0x0;
-                global.data[poolOffset + 1] = 0x80;
-                global.data[poolOffset + 2] = 0xFF;
-                global.data[poolOffset + 3] = 0xFF;
-            }
-        }
-    }
+fn draw() lib.PlatformError!void {
+    gl.clearColor(1, 0, 0, 1.0);
+    gl.clear(.{ .color = true, .depth = true, .stencil = false });
 }
 
 const registryListener = c.wl_registry_listener{
@@ -188,15 +197,13 @@ const registryListener = c.wl_registry_listener{
 
 fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, interface: [*c]const u8, version: u32) callconv(.C) void {
     _ = data;
-    std.log.warn("Registry call! interface = '{s}', version = {d}, name = {d}", .{ interface, version, name });
+    _ = version;
 
     if (std.mem.eql(u8, std.mem.span(interface), std.mem.span(c.wl_compositor_interface.name))) {
         global.compositor = @ptrCast(c.wl_registry_bind(registry, name, &c.wl_compositor_interface, 4));
     } else if (std.mem.eql(u8, std.mem.span(interface), std.mem.span(c.wl_seat_interface.name))) {
         global.seat = @ptrCast(c.wl_registry_bind(registry, name, &c.wl_seat_interface, 7));
         _ = c.wl_seat_add_listener(global.seat, &seatListener, null);
-    } else if (std.mem.eql(u8, std.mem.span(interface), std.mem.span(c.wl_shm_interface.name))) {
-        global.shm = @ptrCast(c.wl_registry_bind(registry, name, &c.wl_shm_interface, 1));
     } else if (std.mem.eql(u8, std.mem.span(interface), std.mem.span(c.xdg_wm_base_interface.name))) {
         global.xdgBase = @ptrCast(c.wl_registry_bind(registry, name, &c.xdg_wm_base_interface, 1));
         _ = c.xdg_wm_base_add_listener(global.xdgBase, &xdgBaseListener, null);
@@ -271,16 +278,9 @@ fn xdgSurfaceConfigure(data: ?*anyopaque, xdgSurface: ?*c.xdg_surface, serial: u
 
     c.xdg_surface_ack_configure(xdgSurface, serial);
 
-    destroyBuffer() catch |e| {
-        std.log.warn("destroyBuffer error: {}", .{e});
-    };
-    createBuffer() catch |e| {
-        std.log.warn("createBuffer error: {}", .{e});
-    };
+    // TODO: ???
 
     draw() catch {};
-    c.wl_surface_attach(global.surface, global.buffer, 0, 0);
-    c.wl_surface_damage_buffer(global.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
     c.wl_surface_commit(global.surface);
 }
 
@@ -293,6 +293,7 @@ fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.
     _ = data;
     _ = xdgToplevel;
 
+    std.log.warn("xdgToplevelClose", .{});
     global.shouldClose = true;
 }
 
@@ -305,12 +306,7 @@ fn xdgToplevelConfigure(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel, width:
         global.width = width;
         global.height = height;
 
-        destroyBuffer() catch |e| {
-            std.log.warn("destroyBuffer error: {}", .{e});
-        };
-        createBuffer() catch |e| {
-            std.log.warn("createBuffer error: {}", .{e});
-        };
+        // TODO: ???
     }
 }
 
@@ -329,9 +325,6 @@ fn frameDone(data: ?*anyopaque, callback: ?*c.wl_callback, time: u32) callconv(.
         global.tempNextFrameTime += 100;
         global.tempOffset += 1;
         draw() catch {};
-        c.wl_surface_attach(global.surface, global.buffer, 0, 0);
-        c.wl_surface_damage_buffer(global.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-        c.wl_surface_commit(global.surface);
     }
 }
 

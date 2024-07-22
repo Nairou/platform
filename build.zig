@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib.addIncludePath(b.path("src/egl"));
     lib.addIncludePath(b.path("src/wayland"));
     lib.addIncludePath(b.path("src/x11"));
     lib.addCSourceFiles(.{
@@ -17,27 +18,46 @@ pub fn build(b: *std.Build) void {
     });
     lib.linkLibC();
     lib.linkSystemLibrary("wayland-client");
+    lib.linkSystemLibrary("wayland-egl");
+    lib.linkSystemLibrary("EGL");
     lib.linkSystemLibrary("xkbcommon");
+
+    if (b.lazyDependency("zgl", .{
+        .target = target,
+        .optimize = optimize,
+    })) |dep| {
+        lib.root_module.addImport("zgl", dep.module("zgl"));
+    }
 
     b.installArtifact(lib);
 
-    const lib_tests = b.addTest(.{
+    const test_lib = b.addTest(.{
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
-    //lib_tests.linkLibrary(lib);
-    lib_tests.addIncludePath(b.path("src/wayland"));
-    lib_tests.addIncludePath(b.path("src/x11"));
-    lib_tests.addCSourceFiles(.{
+    //test_lib.linkLibrary(lib);
+    test_lib.addIncludePath(b.path("src/egl"));
+    test_lib.addIncludePath(b.path("src/wayland"));
+    test_lib.addIncludePath(b.path("src/x11"));
+    test_lib.addCSourceFiles(.{
         .files = &protocol_sources,
     });
-    lib_tests.linkLibC();
-    lib_tests.linkSystemLibrary("wayland-client");
-    lib_tests.linkSystemLibrary("xkbcommon");
+    test_lib.linkLibC();
+    test_lib.linkSystemLibrary("wayland-client");
+    test_lib.linkSystemLibrary("wayland-egl");
+    test_lib.linkSystemLibrary("EGL");
+    test_lib.linkSystemLibrary("xkbcommon");
 
-    const run_lib_unit_tests = b.addRunArtifact(lib_tests);
-    const install_lib_unit_tests = b.addInstallArtifact(lib_tests, .{});
+    if (b.lazyDependency("zgl", .{
+        .target = target,
+        .optimize = optimize,
+    })) |dep| {
+        test_lib.root_module.addImport("zgl", dep.module("zgl"));
+    }
+
+    const run_lib_unit_tests = b.addRunArtifact(test_lib);
+    const install_lib_unit_tests = b.addInstallArtifact(test_lib, .{});
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);

@@ -1,12 +1,7 @@
 const std = @import("std");
-const common = @import("common.zig");
+const lib = @import("lib.zig");
 
-pub const platform: common.Platform = .{
-    .init = init,
-    .deinit = deinit,
-};
-
-fn init(allocator: std.mem.Allocator) common.PlatformError!void {
+fn init(allocator: std.mem.Allocator) lib.PlatformError!void {
     // ...
     _ = allocator;
     std.log.warn("init x11", .{});

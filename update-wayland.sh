@@ -27,6 +27,7 @@ git_clone_rev https://gitlab.freedesktop.org/wayland/wayland.git "$WAYLAND_REV" 
 
 # install/generate headers as per https://gitlab.freedesktop.org/wayland/wayland/-/blob/main/src/meson.build
 mv _wayland/src/wayland{-util,-server{,-core},-client{,-core}}.h src/wayland
+mv _wayland/egl/wayland-{egl,egl-backend,egl-core}.h src/wayland
 
 # generate version header
 version=$(grep -o '\bversion:\s'\''[^'\'']*' _wayland/meson.build | cut -d \' -f 2)

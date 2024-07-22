@@ -14,7 +14,7 @@ pkgs.mkShell {
     gdb
     gnumake
     python3
-    #libglvnd.dev
+    libglvnd.dev
     libxkbcommon.dev
     wayland-scanner.dev
     #xorg.libX11

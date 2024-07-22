@@ -1,7 +1,6 @@
 .{
     .name = "platform",
     .version = "0.1.0",
-    .dependencies = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",
@@ -11,5 +10,12 @@
         // For example...
         //"LICENSE",
         //"README.md",
+    },
+    .dependencies = .{
+        .zgl = .{
+            //.url = "https://github.com/ziglibs/zgl/archive/f04d08def7ab221dd6a907c824067b362ca443e6.tar.gz",
+            .url = "https://github.com/Nairou/zgl/archive/f905460bc6b80bf5359f2dbf48bdb342e0622538.tar.gz",
+            .hash = "122059f1b282209c57cc374baff46ab0498c422c271ec6960d18f8f769195f993df5",
+        },
     },
 }
