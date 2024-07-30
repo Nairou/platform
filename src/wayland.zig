@@ -1,6 +1,10 @@
 const std = @import("std");
 const lib = @import("lib.zig");
+const linux = @import("linux.zig");
 const gl = @import("zgl");
+
+const Window = @import("lib.zig").Window;
+
 const assert = std.debug.assert;
 
 pub const c = @cImport({
@@ -14,51 +18,41 @@ pub const c = @cImport({
     @cInclude("EGL/eglext.h");
 });
 
-const global = struct {
-    // Globals
-    pub var display: *c.wl_display = undefined;
-    pub var registry: *c.wl_registry = undefined;
-    pub var compositor: *c.wl_compositor = undefined;
-    pub var eglDisplay: c.EGLDisplay = undefined;
-    pub var eglWindow: ?*c.wl_egl_window = null;
-    pub var eglSurface: c.EGLSurface = undefined;
-    pub var xdgBase: *c.xdg_wm_base = undefined;
-    pub var seat: *c.wl_seat = undefined;
-    pub var seatCapabilities: struct {
+wl: struct {
+    display: *c.wl_display = undefined,
+    compositor: *c.wl_compositor = undefined,
+    xdgBase: *c.xdg_wm_base = undefined,
+    seat: *c.wl_seat = undefined,
+    seatCapabilities: struct {
         pointer: bool = false,
         keyboard: bool = false,
-    } = .{};
-    const xkb = struct {
-        pub var context: ?*c.xkb_context = null;
-        pub var keymap: ?*c.xkb_keymap = null;
-        pub var state: ?*c.xkb_state = null;
-    };
-    pub var pointer: ?*c.wl_pointer = null;
-    pub var keyboard: ?*c.wl_keyboard = null;
+    } = .{},
+    pointer: ?*c.wl_pointer = null,
+    keyboard: ?*c.wl_keyboard = null,
+} = .{},
+egl: struct {
+    display: c.EGLDisplay = undefined,
+    context: c.EGLContext = undefined,
+    config: c.EGLConfig = undefined,
+} = .{},
+xkb: struct {
+    context: ?*c.xkb_context = null,
+    keymap: ?*c.xkb_keymap = null,
+    state: ?*c.xkb_state = null,
+} = .{},
 
-    // Window (need to move)
-    pub var shouldClose: bool = false;
-    pub var width: i32 = 200;
-    pub var height: i32 = 100;
-    pub var surface: ?*c.wl_surface = null;
-    pub var xdgSurface: *c.xdg_surface = undefined;
-    pub var xdgTopLevel: *c.xdg_toplevel = undefined;
+const Wayland = @This();
 
-    // Temporary testing
-    pub var tempOffset: u32 = 0;
-    pub var tempNextFrameTime: u32 = 0;
-};
-
-fn init(allocator: std.mem.Allocator) lib.PlatformError!void {
+pub fn init(self: *Wayland, allocator: std.mem.Allocator) lib.BackendError!void {
     _ = allocator;
 
     std.log.warn("init wayland", .{});
 
-    global.display = c.wl_display_connect(null) orelse return error.FailedToConnect;
-    global.registry = c.wl_display_get_registry(global.display) orelse return error.FailedToConnect;
-    _ = c.wl_registry_add_listener(global.registry, &registryListener, null);
-    global.xkb.context = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS);
-    _ = c.wl_display_roundtrip(global.display);
+    self.wl.display = c.wl_display_connect(null) orelse return error.FailedToConnect;
+    const registry = c.wl_display_get_registry(self.wl.display) orelse return error.FailedToConnect;
+    _ = c.wl_registry_add_listener(registry, &registryListener, self);
+    self.xkb.context = c.xkb_context_new(c.XKB_CONTEXT_NO_FLAGS);
+    _ = c.wl_display_roundtrip(self.wl.display);
 
     var eglExtPlatformBase: bool = false;
     var eglExtPlatformWayland: bool = false;
@@ -75,17 +69,17 @@ fn init(allocator: std.mem.Allocator) lib.PlatformError!void {
     }
 
     if (eglExtPlatformBase and eglExtPlatformWayland) {
-        global.eglDisplay = c.eglGetPlatformDisplay(c.EGL_PLATFORM_WAYLAND_EXT, global.display, null);
+        self.egl.display = c.eglGetPlatformDisplay(c.EGL_PLATFORM_WAYLAND_EXT, self.wl.display, null);
     } else {
-        global.eglDisplay = c.eglGetDisplay(global.display);
+        self.egl.display = c.eglGetDisplay(self.wl.display);
     }
-    if (global.eglDisplay == c.EGL_NO_DISPLAY) {
+    if (self.egl.display == c.EGL_NO_DISPLAY) {
         return error.EglUnavailable;
     }
 
     var eglMajor: i32 = 0;
     var eglMinor: i32 = 0;
-    if (c.eglInitialize(global.eglDisplay, &eglMajor, &eglMinor) == 0) {
+    if (c.eglInitialize(self.egl.display, &eglMajor, &eglMinor) == 0) {
         return error.EglUnavailable;
     }
     std.log.warn("EGL version {d}.{d}", .{ eglMajor, eglMinor });
@@ -108,12 +102,10 @@ fn init(allocator: std.mem.Allocator) lib.PlatformError!void {
         c.EGL_OPENGL_BIT,
         c.EGL_NONE,
     };
-    var configList: [100]c.EGLConfig = undefined;
-    var configCount: i32 = 0;
-    if (c.eglChooseConfig(global.eglDisplay, @ptrCast(&eglConfigAttributes), &configList, configList.len, &configCount) == 0) {
+    // TODO: Sort through available configs to find the best match
+    if (c.eglChooseConfig(self.egl.display, @ptrCast(&eglConfigAttributes), &self.egl.config, 1, null) == 0) {
         return error.EglUnavailable;
     }
-    std.log.warn("EGL configs: count = {d}", .{configCount});
 
     const eglContextAttributes = [_]u32{
         c.EGL_CONTEXT_MAJOR_VERSION,
@@ -126,37 +118,29 @@ fn init(allocator: std.mem.Allocator) lib.PlatformError!void {
         c.EGL_TRUE,
         c.EGL_NONE,
     };
-    const eglContext = c.eglCreateContext(global.eglDisplay, configList[0], c.EGL_NO_CONTEXT, @ptrCast(&eglContextAttributes)) orelse return error.EglUnavailable;
-
-    // Window
-    {
-        global.surface = c.wl_compositor_create_surface(global.compositor) orelse return error.FailedToConnect;
-        _ = c.wl_surface_add_listener(global.surface, &surfaceListener, null);
-        global.xdgSurface = c.xdg_wm_base_get_xdg_surface(global.xdgBase, global.surface) orelse return error.FailedToConnect;
-        _ = c.xdg_surface_add_listener(global.xdgSurface, &xdgSurfaceListener, null);
-        global.xdgTopLevel = c.xdg_surface_get_toplevel(global.xdgSurface) orelse return error.FailedToConnect;
-        _ = c.xdg_toplevel_add_listener(global.xdgTopLevel, &xdgToplevelListener, null);
-        c.xdg_toplevel_set_app_id(global.xdgTopLevel, "platform");
-        c.xdg_toplevel_set_title(global.xdgTopLevel, "Sample Title");
-        c.wl_surface_commit(global.surface);
-
-        const frameCallback = c.wl_surface_frame(global.surface);
-        _ = c.wl_callback_add_listener(frameCallback, &frameListener, null);
-
-        global.eglWindow = c.wl_egl_window_create(global.surface, global.width, global.height) orelse return error.EglUnavailable;
-        global.eglSurface = c.eglCreatePlatformWindowSurface(global.eglDisplay, configList[0], global.eglWindow, null) orelse return error.EglUnavailable;
-        if (c.eglMakeCurrent(global.eglDisplay, global.eglSurface, global.eglSurface, eglContext) == 0) {
-            return error.EglUnavailable;
-        }
-    }
+    self.egl.context = c.eglCreateContext(self.egl.display, self.egl.config, c.EGL_NO_CONTEXT, @ptrCast(&eglContextAttributes)) orelse return error.EglUnavailable;
 
     gl.loadExtensions(void, glGetProcAddress) catch return error.CantLoadGlExtensions;
+}
 
-    while (!global.shouldClose) {
-        _ = c.wl_display_dispatch(global.display);
-        draw() catch {};
+pub fn initWindow(self: *Wayland, window: *Window) !void {
+    window.surface = c.wl_compositor_create_surface(self.compositor) orelse return error.FailedToConnect;
+    _ = c.wl_surface_add_listener(window.surface, &surfaceListener, window);
+    window.xdgSurface = c.xdg_wm_base_get_xdg_surface(window.xdgBase, window.surface) orelse return error.FailedToConnect;
+    _ = c.xdg_surface_add_listener(window.xdgSurface, &xdgSurfaceListener, window);
+    window.xdgTopLevel = c.xdg_surface_get_toplevel(window.xdgSurface) orelse return error.FailedToConnect;
+    _ = c.xdg_toplevel_add_listener(window.xdgTopLevel, &xdgToplevelListener, window);
+    c.xdg_toplevel_set_app_id(window.xdgTopLevel, "platform");
+    c.xdg_toplevel_set_title(window.xdgTopLevel, "Sample Title");
+    c.wl_surface_commit(window.surface);
 
-        _ = c.eglSwapBuffers(global.eglDisplay, global.eglSurface);
+    const frameCallback = c.wl_surface_frame(window.surface);
+    _ = c.wl_callback_add_listener(frameCallback, &frameListener, window);
+
+    window.eglWindow = c.wl_egl_window_create(window.surface, window.width, window.height) orelse return error.EglUnavailable;
+    window.eglSurface = c.eglCreatePlatformWindowSurface(self.egl.display, self.egl.config, window.eglWindow, null) orelse return error.EglUnavailable;
+    if (c.eglMakeCurrent(self.egl.display, window.eglSurface, window.eglSurface, self.egl.context) == 0) {
+        return error.EglUnavailable;
     }
 }
 
@@ -165,30 +149,38 @@ pub fn glGetProcAddress(comptime _: type, proc: [:0]const u8) ?*const anyopaque 
 }
 
 test "init" {
-    _ = try init(std.testing.allocator);
+    var wayland = std.mem.zeroInit(Wayland, .{});
+    _ = try wayland.init(std.testing.allocator);
+    defer wayland.deinit();
 }
 
-pub fn deinit() void {
-    c.xkb_keymap_unref(global.xkb.keymap);
-    c.xkb_state_unref(global.xkb.state);
+pub fn deinit(self: *Wayland) void {
+    c.xkb_keymap_unref(self.xkb.keymap);
+    c.xkb_state_unref(self.xkb.state);
 
-    if (global.keyboard) |keyboard| {
+    if (self.keyboard) |keyboard| {
         c.wl_keyboard_release(keyboard);
     }
-    if (global.pointer) |pointer| {
+    if (self.pointer) |pointer| {
         c.wl_pointer_release(pointer);
     }
-    c.wl_seat_release(global.seat);
-    c.wl_surface_destroy(global.surface);
-    c.wl_egl_window_destroy(global.eglWindow);
-    c.eglTerminate(global.eglDisplay);
-    c.wl_display_disconnect(global.display);
+    c.wl_seat_release(self.seat);
+    c.eglTerminate(self.egl.display);
+    c.wl_display_disconnect(self.wl.display);
 }
 
-fn draw() lib.PlatformError!void {
-    gl.clearColor(1, 0, 0, 1.0);
-    gl.clear(.{ .color = true, .depth = true, .stencil = false });
+pub fn deinitWindowData(data: *linux.WindowData) void {
+    c.wl_surface_destroy(data.surface);
+    c.wl_egl_window_destroy(data.eglWindow);
 }
+
+pub fn swapWindowBuffer(self: *Wayland, window: *Window) void {
+    // TODO: Return error?
+    _ = c.eglSwapBuffers(self.egl.display, window.internal.eglSurface);
+    //c.wl_surface_commit(window.internal.wlSurface);
+}
+
+// ----------
 
 const registryListener = c.wl_registry_listener{
     .global = registryGlobal,
@@ -196,17 +188,17 @@ const registryListener = c.wl_registry_listener{
 };
 
 fn registryGlobal(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32, interface: [*c]const u8, version: u32) callconv(.C) void {
-    _ = data;
     _ = version;
 
+    var self: *Wayland = @alignCast(@ptrCast(data));
     if (std.mem.eql(u8, std.mem.span(interface), std.mem.span(c.wl_compositor_interface.name))) {
-        global.compositor = @ptrCast(c.wl_registry_bind(registry, name, &c.wl_compositor_interface, 4));
+        self.compositor = @ptrCast(c.wl_registry_bind(registry, name, &c.wl_compositor_interface, 4));
     } else if (std.mem.eql(u8, std.mem.span(interface), std.mem.span(c.wl_seat_interface.name))) {
-        global.seat = @ptrCast(c.wl_registry_bind(registry, name, &c.wl_seat_interface, 7));
-        _ = c.wl_seat_add_listener(global.seat, &seatListener, null);
+        self.seat = @ptrCast(c.wl_registry_bind(registry, name, &c.wl_seat_interface, 7));
+        _ = c.wl_seat_add_listener(self.seat, &seatListener, self);
     } else if (std.mem.eql(u8, std.mem.span(interface), std.mem.span(c.xdg_wm_base_interface.name))) {
-        global.xdgBase = @ptrCast(c.wl_registry_bind(registry, name, &c.xdg_wm_base_interface, 1));
-        _ = c.xdg_wm_base_add_listener(global.xdgBase, &xdgBaseListener, null);
+        self.xdgBase = @ptrCast(c.wl_registry_bind(registry, name, &c.xdg_wm_base_interface, 1));
+        _ = c.xdg_wm_base_add_listener(self.xdgBase, &xdgBaseListener, self);
     }
 }
 
@@ -214,16 +206,6 @@ fn registryGlobalRemove(data: ?*anyopaque, registry: ?*c.wl_registry, name: u32)
     _ = data;
     _ = registry;
     std.log.warn("Registry remove! name = {d}", .{name});
-}
-
-const bufferListener = c.wl_buffer_listener{
-    .release = bufferRelease,
-};
-
-fn bufferRelease(data: ?*anyopaque, buffer: ?*c.wl_buffer) callconv(.C) void {
-    _ = data;
-    std.log.warn("wl_buffer.release", .{});
-    c.wl_buffer_destroy(buffer);
 }
 
 const xdgBaseListener = c.xdg_wm_base_listener{
@@ -273,15 +255,13 @@ const xdgSurfaceListener = c.xdg_surface_listener{
 };
 
 fn xdgSurfaceConfigure(data: ?*anyopaque, xdgSurface: ?*c.xdg_surface, serial: u32) callconv(.C) void {
-    _ = data;
     std.log.warn("xdg_surface.configure", .{});
 
     c.xdg_surface_ack_configure(xdgSurface, serial);
 
     // TODO: ???
-
-    draw() catch {};
-    c.wl_surface_commit(global.surface);
+    const window: *Window = @alignCast(@ptrCast(data));
+    c.wl_surface_commit(window.internal.wlSurface);
 }
 
 const xdgToplevelListener = c.xdg_toplevel_listener{
@@ -290,23 +270,24 @@ const xdgToplevelListener = c.xdg_toplevel_listener{
 };
 
 fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.C) void {
-    _ = data;
     _ = xdgToplevel;
 
+    const window: *Window = @alignCast(@ptrCast(data));
     std.log.warn("xdgToplevelClose", .{});
-    global.shouldClose = true;
+    window.shouldClose = true;
 }
 
 fn xdgToplevelConfigure(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel, width: i32, height: i32, states: [*c]c.wl_array) callconv(.C) void {
-    _ = data;
     _ = xdgToplevel;
 
+    const window: *Window = @alignCast(@ptrCast(data));
     std.log.warn("xdg_toplevel.configure: width = {d}, height = {d}, states = [{any}]", .{ width, height, states });
     if (width != 0 and height != 0) {
-        global.width = width;
-        global.height = height;
+        window.width = width;
+        window.height = height;
 
-        // TODO: ???
+        c.wl_egl_window_resize(window.internal.eglWindow, width, height, 0, 0);
+        c.wl_surface_commit(window.internal.wlSurface);
     }
 }
 
@@ -315,17 +296,13 @@ const frameListener = c.wl_callback_listener{
 };
 
 fn frameDone(data: ?*anyopaque, callback: ?*c.wl_callback, time: u32) callconv(.C) void {
-    _ = data;
-
+    _ = time;
+    const window: *Window = @alignCast(@ptrCast(data));
     c.wl_callback_destroy(callback);
-    const frameCallback = c.wl_surface_frame(global.surface);
-    _ = c.wl_callback_add_listener(frameCallback, &frameListener, null);
+    const frameCallback = c.wl_surface_frame(window.internal.wlSurface);
+    _ = c.wl_callback_add_listener(frameCallback, &frameListener, window);
 
-    if (time >= global.tempNextFrameTime) {
-        global.tempNextFrameTime += 100;
-        global.tempOffset += 1;
-        draw() catch {};
-    }
+    // TODO: emit event
 }
 
 const seatListener = c.wl_seat_listener{
@@ -334,34 +311,34 @@ const seatListener = c.wl_seat_listener{
 };
 
 fn seatCapabilities(data: ?*anyopaque, seat: ?*c.wl_seat, capability: u32) callconv(.C) void {
-    _ = data;
     _ = seat;
 
+    const self: *Wayland = @alignCast(@ptrCast(data));
     std.log.warn("Seat capability: {d}", .{capability});
     const usePointer = (capability & c.WL_SEAT_CAPABILITY_POINTER) != 0;
     const useKeyboard = (capability & c.WL_SEAT_CAPABILITY_KEYBOARD) != 0;
 
-    if (usePointer and global.pointer == null) {
+    if (usePointer and self.pointer == null) {
         std.log.warn("seat: add pointer", .{});
-        global.pointer = c.wl_seat_get_pointer(global.seat);
-        _ = c.wl_pointer_add_listener(global.pointer, &pointerListener, null);
-    } else if (!usePointer and global.pointer != null) {
+        self.pointer = c.wl_seat_get_pointer(self.seat);
+        _ = c.wl_pointer_add_listener(self.pointer, &pointerListener, self);
+    } else if (!usePointer and self.pointer != null) {
         std.log.warn("seat: remove pointer", .{});
-        c.wl_pointer_release(global.pointer);
-        global.pointer = null;
+        c.wl_pointer_release(self.pointer);
+        self.pointer = null;
     }
 
-    if (useKeyboard and global.keyboard == null) {
+    if (useKeyboard and self.keyboard == null) {
         std.log.warn("seat: add keyboard", .{});
-        global.keyboard = c.wl_seat_get_keyboard(global.seat);
-        _ = c.wl_keyboard_add_listener(global.keyboard, &keyboardListener, null);
-    } else if (!useKeyboard and global.keyboard != null) {
+        self.keyboard = c.wl_seat_get_keyboard(self.seat);
+        _ = c.wl_keyboard_add_listener(self.keyboard, &keyboardListener, self);
+    } else if (!useKeyboard and self.keyboard != null) {
         std.log.warn("seat: remove keyboard", .{});
-        c.wl_keyboard_release(global.keyboard);
-        global.keyboard = null;
+        c.wl_keyboard_release(self.keyboard);
+        self.keyboard = null;
     }
 
-    global.seatCapabilities = .{
+    self.seatCapabilities = .{
         .pointer = usePointer,
         .keyboard = useKeyboard,
     };
@@ -474,24 +451,24 @@ fn keyboardEnter(data: ?*anyopaque, keyboard: ?*c.wl_keyboard, serial: u32, surf
 }
 
 fn keyboardKey(data: ?*anyopaque, keyboard: ?*c.wl_keyboard, serial: u32, time: u32, key: u32, state: u32) callconv(.C) void {
-    _ = data;
     _ = keyboard;
+    const self: *Wayland = @alignCast(@ptrCast(data));
     const keycode = key + 8;
-    const sym = c.xkb_state_key_get_one_sym(global.xkb.state, keycode);
+    const sym = c.xkb_state_key_get_one_sym(self.xkb.state, keycode);
     std.log.warn("wl_keyboard.key: serial = {d}, time = {d}, key = {d}, sym = {d}, state = {d}", .{ serial, time, key, sym, state });
 }
 
 fn keyboardKeymap(data: ?*anyopaque, keyboard: ?*c.wl_keyboard, format: u32, fd: i32, size: u32) callconv(.C) void {
-    _ = data;
     _ = keyboard;
+    const self: *Wayland = @alignCast(@ptrCast(data));
     assert(format == c.WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
-    c.xkb_keymap_unref(global.xkb.keymap);
+    c.xkb_keymap_unref(self.xkb.keymap);
     const shm = std.posix.mmap(null, size, std.posix.PROT.READ, @bitCast(std.posix.MAP{ .TYPE = .PRIVATE }), fd, 0) catch unreachable;
-    global.xkb.keymap = c.xkb_keymap_new_from_string(global.xkb.context, shm.ptr, c.XKB_KEYMAP_FORMAT_TEXT_V1, c.XKB_KEYMAP_COMPILE_NO_FLAGS);
+    self.xkb.keymap = c.xkb_keymap_new_from_string(self.xkb.context, shm.ptr, c.XKB_KEYMAP_FORMAT_TEXT_V1, c.XKB_KEYMAP_COMPILE_NO_FLAGS);
     std.posix.munmap(shm);
     std.posix.close(fd);
-    c.xkb_state_unref(global.xkb.state);
-    global.xkb.state = c.xkb_state_new(global.xkb.keymap);
+    c.xkb_state_unref(self.xkb.state);
+    self.xkb.state = c.xkb_state_new(self.xkb.keymap);
 }
 
 fn keyboardLeave(data: ?*anyopaque, keyboard: ?*c.wl_keyboard, serial: u32, surface: ?*c.wl_surface) callconv(.C) void {
@@ -502,10 +479,10 @@ fn keyboardLeave(data: ?*anyopaque, keyboard: ?*c.wl_keyboard, serial: u32, surf
 }
 
 fn keyboardModifiers(data: ?*anyopaque, keyboard: ?*c.wl_keyboard, serial: u32, depressed: u32, latched: u32, locked: u32, group: u32) callconv(.C) void {
-    _ = data;
     _ = keyboard;
     _ = serial;
-    _ = c.xkb_state_update_mask(global.xkb.state, depressed, latched, locked, 0, 0, group);
+    const self: *Wayland = @alignCast(@ptrCast(data));
+    _ = c.xkb_state_update_mask(self.xkb.state, depressed, latched, locked, 0, 0, group);
 }
 
 fn keyboardRepeatInfo(data: ?*anyopaque, keyboard: ?*c.wl_keyboard, rate: i32, delay: i32) callconv(.C) void {
