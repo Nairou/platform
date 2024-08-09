@@ -2,21 +2,44 @@ const std = @import("std");
 const platform = @import("platform");
 const gl = @import("zgl");
 
+var gradient: u8 = 0;
+
 pub fn main() anyerror!void {
     _ = try platform.init(std.heap.page_allocator);
     defer platform.deinit();
 
     gl.loadExtensions(void, glGetProcAddress) catch return error.CantLoadGlExtensions;
 
-    var window: platform.Window = undefined;
-    try window.init(200, 100);
+    const window = try platform.Window.create(200, 100, "platform", "Example!");
+    std.log.debug("Opened window, id = {}", .{window.id});
+    draw(window.id);
 
-    while (true) {
-        gl.clearColor(1.0, 0.0, 0.0, 1.0);
+    var running = true;
+    while (running) {
+        while (platform.readNextEvent(true)) |event| {
+            switch (event) {
+                .close_window => {
+                    running = false;
+                    std.log.debug("Window wants to close", .{});
+                },
+                .render => |render| {
+                    gradient +%= 1;
+                    draw(render.window);
+                },
+                else => std.log.debug("Unknown event: {}", .{event}),
+            }
+        }
+    }
+}
+
+fn draw(windowId: platform.WindowId) void {
+    if (platform.Window.fromId(windowId)) |window| {
+        const r = @as(f32, @floatFromInt(gradient)) / 255;
+        const g = 1.0 - @as(f32, @floatFromInt(gradient)) / 255;
+        gl.clearColor(r, g, 0.0, 1.0);
         gl.clear(.{ .color = true, .depth = true, .stencil = false });
 
-        platform.processEvents();
-        platform.swapWindowBuffer(&window);
+        window.swapBuffers();
     }
 }
 

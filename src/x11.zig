@@ -19,7 +19,8 @@ pub fn deinit(backend: *X11) void {
     _ = backend;
 }
 
-pub fn processEvents(backend: *X11) void {
+pub fn processEvents(backend: *X11, wait: bool) void {
+    _ = wait;
     _ = backend;
 }
 

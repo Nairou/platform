@@ -1,4 +1,5 @@
 const std = @import("std");
+const Platform = @import("lib.zig");
 const BackendError = @import("lib.zig").BackendError;
 const Window = @import("lib.zig").Window;
 const WindowId = @import("lib.zig").WindowId;
@@ -165,7 +166,8 @@ pub fn deinit(backend: *Wayland) void {
     c.wl_display_disconnect(backend.display);
 }
 
-pub fn processEvents(backend: *Wayland) void {
+pub fn processEvents(backend: *Wayland, wait: bool) void {
+    _ = wait;
     _ = c.wl_display_dispatch(backend.display);
 }
 
@@ -306,7 +308,7 @@ fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.
 
     const window: *Window = @alignCast(@ptrCast(data));
     std.log.debug("xdgToplevelClose", .{});
-    window.close();
+    Platform.writeEvent(.{ .close_window = .{ .window = window.id } });
 }
 
 fn xdgToplevelConfigure(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel, width: i32, height: i32, states: [*c]c.wl_array) callconv(.C) void {
@@ -334,7 +336,7 @@ fn frameDone(data: ?*anyopaque, callback: ?*c.wl_callback, time: u32) callconv(.
     const frameCallback = c.wl_surface_frame(window.backend.wayland.wlSurface);
     _ = c.wl_callback_add_listener(frameCallback, &frameListener, window);
 
-    // TODO: emit event
+    Platform.writeEvent(.{ .render = .{ .window = window.id } });
 }
 
 const seatListener = c.wl_seat_listener{

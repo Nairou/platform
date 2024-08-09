@@ -18,6 +18,11 @@ pub fn deinit(self: *Backend) void {
     _ = self;
 }
 
+pub fn processEvents(backend: *Backend, wait: bool) void {
+    _ = wait;
+    _ = backend;
+}
+
 pub fn getProcAddress(self: *Backend, proc: [:0]const u8) ?*const anyopaque {
     _ = self;
     _ = proc;
