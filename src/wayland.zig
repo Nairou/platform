@@ -308,7 +308,7 @@ fn xdgToplevelClose(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel) callconv(.
 
     const window: *Window = @alignCast(@ptrCast(data));
     std.log.debug("xdgToplevelClose", .{});
-    Platform.writeEvent(.{ .close_window = .{ .window = window.id } });
+    Platform.writeEvent(.{ .window_close = .{ .window = window.id } });
 }
 
 fn xdgToplevelConfigure(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel, width: i32, height: i32, states: [*c]c.wl_array) callconv(.C) void {
@@ -319,6 +319,7 @@ fn xdgToplevelConfigure(data: ?*anyopaque, xdgToplevel: ?*c.xdg_toplevel, width:
     if (width != 0 and height != 0) {
         window.width = @intCast(width);
         window.height = @intCast(height);
+        Platform.writeEvent(.{ .window_size = .{ .window = window.id, .width = window.width, .height = window.height } });
 
         c.wl_egl_window_resize(window.backend.wayland.eglWindow, width, height, 0, 0);
         c.wl_surface_commit(window.backend.wayland.wlSurface);
@@ -336,7 +337,7 @@ fn frameDone(data: ?*anyopaque, callback: ?*c.wl_callback, time: u32) callconv(.
     const frameCallback = c.wl_surface_frame(window.backend.wayland.wlSurface);
     _ = c.wl_callback_add_listener(frameCallback, &frameListener, window);
 
-    Platform.writeEvent(.{ .render = .{ .window = window.id } });
+    Platform.writeEvent(.{ .window_refresh = .{ .window = window.id } });
 }
 
 const seatListener = c.wl_seat_listener{

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const platform = @import("platform");
 const gl = @import("zgl");
 
@@ -8,7 +9,9 @@ pub fn main() anyerror!void {
     _ = try platform.init(std.heap.page_allocator);
     defer platform.deinit();
 
-    gl.loadExtensions(void, glGetProcAddress) catch return error.CantLoadGlExtensions;
+    if (builtin.os.tag == .linux) {
+        gl.loadExtensions(void, glGetProcAddress) catch return error.CantLoadGlExtensions;
+    }
 
     const window = try platform.Window.create(200, 100, "platform", "Example!");
     std.log.debug("Opened window, id = {}", .{window.id});
@@ -18,13 +21,16 @@ pub fn main() anyerror!void {
     while (running) {
         while (platform.readNextEvent(true)) |event| {
             switch (event) {
-                .close_window => {
+                .window_refresh => |window_refresh| {
+                    gradient +%= 1;
+                    draw(window_refresh.window);
+                },
+                .window_close => |_| {
                     running = false;
                     std.log.debug("Window wants to close", .{});
                 },
-                .render => |render| {
-                    gradient +%= 1;
-                    draw(render.window);
+                .window_size => |window_size| {
+                    std.log.debug("Window resized to {d}x{d}", .{ window_size.width, window_size.height });
                 },
                 else => std.log.debug("Unknown event: {}", .{event}),
             }
@@ -34,10 +40,12 @@ pub fn main() anyerror!void {
 
 fn draw(windowId: platform.WindowId) void {
     if (platform.Window.fromId(windowId)) |window| {
-        const r = @as(f32, @floatFromInt(gradient)) / 255;
-        const g = 1.0 - @as(f32, @floatFromInt(gradient)) / 255;
-        gl.clearColor(r, g, 0.0, 1.0);
-        gl.clear(.{ .color = true, .depth = true, .stencil = false });
+        if (builtin.os.tag == .linux) {
+            const r = @as(f32, @floatFromInt(gradient)) / 255;
+            const g = 1.0 - @as(f32, @floatFromInt(gradient)) / 255;
+            gl.clearColor(r, g, 0.0, 1.0);
+            gl.clear(.{ .color = true, .depth = true, .stencil = false });
+        }
 
         window.swapBuffers();
     }

@@ -28,8 +28,3 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 }
-
-const protocol_sources = [_][]const u8{
-    "src/wayland/wayland-protocol.c",
-    "src/wayland/xdg-shell-protocol.c",
-};

@@ -128,11 +128,22 @@ pub const Window = struct {
 
 pub const Event = union(enum) {
     none,
-    close_window: struct {
+    exit,
+    window_close: struct {
         window: WindowId,
     },
-    render: struct {
+    window_focus: struct {
         window: WindowId,
+    },
+    window_position,
+    window_refresh: struct {
+        window: WindowId,
+    },
+    window_scale,
+    window_size: struct {
+        window: WindowId,
+        width: u32,
+        height: u32,
     },
 };
 

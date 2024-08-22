@@ -8,11 +8,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lib.zig"),
         .link_libc = true,
     });
-    module.addIncludePath(b.path("src/egl"));
-    module.addIncludePath(b.path("src/wayland"));
-    module.addIncludePath(b.path("src/x11"));
-
-    // Library
     const lib = b.addStaticLibrary(.{
         .name = "platform",
         .root_source_file = b.path("src/lib.zig"),
@@ -20,16 +15,33 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    lib.addIncludePath(b.path("src/egl"));
-    lib.addIncludePath(b.path("src/wayland"));
-    lib.addIncludePath(b.path("src/x11"));
-    lib.addCSourceFiles(.{
-        .files = &protocol_sources,
-    });
-    lib.linkSystemLibrary("wayland-client");
-    lib.linkSystemLibrary("wayland-egl");
-    lib.linkSystemLibrary("EGL");
-    lib.linkSystemLibrary("xkbcommon");
+
+    switch (target.result.os.tag) {
+        .linux => {
+            const includes = [_][]const u8{
+                "src/egl",
+                "src/wayland",
+                "src/x11",
+            };
+            for (includes) |path| {
+                module.addIncludePath(b.path(path));
+                lib.addIncludePath(b.path(path));
+            }
+            lib.addCSourceFiles(.{
+                .files = &protocol_sources,
+            });
+            lib.linkSystemLibrary("wayland-client");
+            lib.linkSystemLibrary("wayland-egl");
+            lib.linkSystemLibrary("EGL");
+            lib.linkSystemLibrary("xkbcommon");
+        },
+        .windows => {
+            //lib.linkSystemLibrary("gdi32");
+            //lib.linkSystemLibrary("user32");
+            //lib.linkSystemLibrary("kernel32");
+        },
+        else => {},
+    }
 
     b.installArtifact(lib);
     module.linkLibrary(lib);
@@ -43,18 +55,19 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         });
         test_lib.linkLibrary(lib);
-        test_lib.addIncludePath(b.path("src/egl"));
-        test_lib.addIncludePath(b.path("src/wayland"));
-        test_lib.addIncludePath(b.path("src/x11"));
+        switch (target.result.os.tag) {
+            .linux => {
+                test_lib.addIncludePath(b.path("src/egl"));
+                test_lib.addIncludePath(b.path("src/wayland"));
+                test_lib.addIncludePath(b.path("src/x11"));
+            },
+            else => {},
+        }
 
         const test_step = b.step("test", "Run unit tests");
         const test_step_run = b.addRunArtifact(test_lib);
         test_step_run.has_side_effects = true;
         test_step.dependOn(&test_step_run.step);
-
-        const testbin_step = b.step("test-bin", "Build unit tests into separate binary");
-        const testbin_step_run = b.addInstallArtifact(test_lib, .{});
-        testbin_step.dependOn(&testbin_step_run.step);
     }
 }
 
