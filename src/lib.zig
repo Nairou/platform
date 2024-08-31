@@ -58,11 +58,11 @@ pub const BackendError = error{
 
 pub const Backend = switch (builtin.os.tag) {
     .linux => union(enum) {
-        wayland: @import("wayland.zig"),
-        x11: @import("x11.zig"),
+        wayland: @import("backend_wayland.zig"),
+        x11: @import("backend_x11.zig"),
     },
     .windows => union(enum) {
-        windows: @import("windows.zig"),
+        windows: @import("backend_windows.zig"),
     },
     else => @compileError("Unsupported backend"),
 };
@@ -75,11 +75,11 @@ pub const Window = struct {
     title: []const u8,
     backend: switch (builtin.os.tag) {
         .linux => union(enum) {
-            wayland: @import("wayland.zig").WindowData,
-            x11: @import("x11.zig").WindowData,
+            wayland: @import("backend_wayland.zig").WindowData,
+            x11: @import("backend_x11.zig").WindowData,
         },
         .windows => union(enum) {
-            windows: @import("windows.zig").WindowData,
+            windows: @import("backend_windows.zig").WindowData,
         },
         else => @compileError("Unsupported backend"),
     } = undefined,
