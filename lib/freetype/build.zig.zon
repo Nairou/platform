@@ -1,0 +1,17 @@
+.{
+    .name = .freetype,
+    .version = "2.13.3",
+    .minimum_zig_version = "0.13.0",
+    .fingerprint = 0xac2059b609c48c68,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "lib.zig",
+    },
+    .dependencies = .{
+        .freetype = .{
+            .url = "https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-13-3/freetype-VER-2-13-3.tar.gz",
+            .hash = "N-V-__8AAKfbpwAXnUJ6TJEaqZGWgp6F_8OhiLErejRxQ7Y5",
+        },
+    },
+}

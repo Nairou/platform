@@ -129,6 +129,10 @@ pub const Window = struct {
 pub const Event = union(enum) {
     none,
     exit,
+    key: struct {},
+    pointer_button: struct {},
+    pointer_position: struct {},
+    pointer_scroll: struct {},
     window_close: struct {
         window: WindowId,
     },

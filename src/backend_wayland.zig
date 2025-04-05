@@ -341,11 +341,11 @@ fn frameDone(data: ?*anyopaque, callback: ?*c.wl_callback, time: u32) callconv(.
 }
 
 const seatListener = c.wl_seat_listener{
-    .capabilities = seatCapabilities,
+    .capabilities = seatCapabilitiesCallback,
     .name = seatName,
 };
 
-fn seatCapabilities(data: ?*anyopaque, seat: ?*c.wl_seat, capability: u32) callconv(.C) void {
+fn seatCapabilitiesCallback(data: ?*anyopaque, seat: ?*c.wl_seat, capability: u32) callconv(.C) void {
     _ = seat;
 
     const backend: *Wayland = @alignCast(@ptrCast(data));

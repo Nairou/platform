@@ -1,15 +1,21 @@
 .{
-    .name = "platform-example",
+    .name = .platform_example,
     .version = "0.0.0",
+    .fingerprint = 0x7bdc51cdc28a7813,
     .paths = .{""},
     .dependencies = .{
         .platform = .{
             .path = "..",
         },
+        .freetype = .{
+            .path = "../lib/freetype",
+        },
+        .harfbuzz = .{
+            .path = "../lib/harfbuzz",
+        },
         .zgl = .{
-            //.url = "https://github.com/ziglibs/zgl/archive/f04d08def7ab221dd6a907c824067b362ca443e6.tar.gz",
-            .url = "https://github.com/Nairou/zgl/archive/f905460bc6b80bf5359f2dbf48bdb342e0622538.tar.gz",
-            .hash = "122059f1b282209c57cc374baff46ab0498c422c271ec6960d18f8f769195f993df5",
+            .url = "https://github.com/ziglibs/zgl/archive/bba18181488d527c603407a0f38a346aeb9829e4.tar.gz",
+            .hash = "zgl-1.1.0-p_NpAH2rCQCau2UOYRdNu2eC-_T4CMWcgpqpv8REofLl",
         },
     },
 }

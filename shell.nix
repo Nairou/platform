@@ -1,11 +1,13 @@
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
-  buildInputs = [
-    pkgs.hello
+  buildInputs = with pkgs; [
+    libglvnd.dev
+    libxkbcommon.dev
+    wayland
 
     # keep this line if you use bash
-    pkgs.bashInteractive
+    bashInteractive
   ];
 
   packages = with pkgs; [
@@ -14,9 +16,6 @@ pkgs.mkShell {
     gdb
     gnumake
     python3
-    libglvnd.dev
-    libxkbcommon.dev
-    wayland-scanner.dev
     #xorg.libX11
     #xorg.libxcb
     #xorg.xorgproto
@@ -30,4 +29,3 @@ pkgs.mkShell {
 }
 
 # Remember to run `lorri init` for a new project
-

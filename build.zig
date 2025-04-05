@@ -6,14 +6,13 @@ pub fn build(b: *std.Build) void {
 
     const module = b.addModule("platform", .{
         .root_source_file = b.path("src/lib.zig"),
-        .link_libc = true,
-    });
-    const lib = b.addStaticLibrary(.{
-        .name = "platform",
-        .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+    });
+    const lib = b.addLibrary(.{
+        .name = "platform",
+        .root_module = module,
     });
 
     switch (target.result.os.tag) {
@@ -25,15 +24,14 @@ pub fn build(b: *std.Build) void {
             };
             for (includes) |path| {
                 module.addIncludePath(b.path(path));
-                lib.addIncludePath(b.path(path));
             }
-            lib.addCSourceFiles(.{
+            module.addCSourceFiles(.{
                 .files = &protocol_sources,
             });
-            lib.linkSystemLibrary("wayland-client");
-            lib.linkSystemLibrary("wayland-egl");
-            lib.linkSystemLibrary("EGL");
-            lib.linkSystemLibrary("xkbcommon");
+            module.linkSystemLibrary("wayland-client", .{});
+            module.linkSystemLibrary("wayland-egl", .{});
+            module.linkSystemLibrary("EGL", .{});
+            module.linkSystemLibrary("xkbcommon", .{});
         },
         .windows => {
             //lib.linkSystemLibrary("gdi32");
@@ -44,7 +42,6 @@ pub fn build(b: *std.Build) void {
     }
 
     b.installArtifact(lib);
-    module.linkLibrary(lib);
 
     // Tests
     {
