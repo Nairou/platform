@@ -362,7 +362,7 @@ pub fn main() anyerror!void {
 
     const buffer = harfbuzz.c.hb_buffer_create();
     defer harfbuzz.c.hb_buffer_destroy(buffer);
-    harfbuzz.c.hb_buffer_add_utf8(buffer, "Hello, World!", -1, 0, -1);
+    harfbuzz.c.hb_buffer_add_utf8(buffer, "Hello, World! Totally awesome...", -1, 0, -1);
     harfbuzz.c.hb_buffer_set_direction(buffer, harfbuzz.c.HB_DIRECTION_LTR);
     harfbuzz.c.hb_buffer_set_script(buffer, harfbuzz.c.HB_SCRIPT_LATIN);
     harfbuzz.c.hb_buffer_set_language(buffer, harfbuzz.c.hb_language_from_string("en", -1));
@@ -584,7 +584,7 @@ pub fn main() anyerror!void {
             \\void main()
             \\{
             \\    vec4 t = texture( TextureSampler, data.texture );
-            \\    outColor = vec4( t.r, 0, 0, 1 );
+            \\    outColor = vec4( 1, 1, 1, t.r );
             \\}
             \\
             \\
@@ -652,16 +652,11 @@ pub fn main() anyerror!void {
         var textY: f32 = 100;
         for (0..glyphCount) |i| {
             const glyphId = glyphInfo[i].codepoint;
-            const xOffset = glyphPos[i].x_offset;
-            const yOffset = glyphPos[i].y_offset;
-            const xAdvance = glyphPos[i].x_advance;
-            const yAdvance = glyphPos[i].y_advance;
-            std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xAdvance, yAdvance });
 
             _ = freetype.c.FT_Load_Glyph(ftFace, glyphInfo[i].codepoint, freetype.c.FT_LOAD_RENDER | freetype.c.FT_LOAD_NO_HINTING);
             const glyph = ftFace.*.glyph.*;
             const slot = atlas.getGlyph(123, glyphId) orelse blk: {
-                const slot = try atlas.insertGlyph(atlasAllocator.allocator(), 123, glyphId, @intCast(glyph.bitmap.width), @intCast(glyph.bitmap.rows));
+                const slot = try atlas.insertGlyph(atlasAllocator.allocator(), 123, glyphId, @intCast(glyph.bitmap.width), @intCast(glyph.bitmap.rows), @intCast(glyph.bitmap_top), @intCast(glyph.bitmap_left));
                 std.log.debug("Atlas: slot = {}", .{slot});
                 std.log.debug("FT: advance = {d}, {d}", .{ glyph.advance.x, glyph.advance.y });
                 //gl.texSubImage2D(.@"2d", 0, 20, 20, @abs(glyph.bitmap.pitch), glyph.bitmap.rows, .red, .unsigned_byte, glyph.bitmap.buffer);
@@ -677,16 +672,24 @@ pub fn main() anyerror!void {
                 break :blk slot;
             };
 
+            const xOffset = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / 64;
+            const yOffset = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / 64;
+            const xAdvance = @as(f32, @floatFromInt(glyphPos[i].x_advance)) / 64;
+            const yAdvance = @as(f32, @floatFromInt(glyphPos[i].y_advance)) / 64;
+            //const xBearing = @as(f32, @floatFromInt(glyph.metrics.horiBearingX)) / 64;
+            //const yBearing = @as(f32, @floatFromInt(glyph.metrics.horiBearingY)) / 64;
+            std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
+
             const instance = try textInstanceBuffer.addOne(textAllocator.allocator());
             instance.* = .{
-                .position = .{ textX, textY },
+                .position = .{ textX + xOffset + @as(f32, @floatFromInt(slot.offset[0])), textY + yOffset - @as(f32, @floatFromInt(slot.offset[1])) },
                 .size = .{ @floatFromInt(slot.size[0]), @floatFromInt(slot.size[1]) },
                 .texture = .{ @floatFromInt(slot.position[0]), @floatFromInt(slot.position[1]) },
-                .color = .{ .r = 1, .g = 0, .b = 0, .a = 1 },
+                .color = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
             };
-            std.log.debug("Glyph instance: {}", .{instance.*});
-            textX += @as(f32, @floatFromInt(xAdvance)) / 64;
-            textY += @as(f32, @floatFromInt(yAdvance)) / 64;
+            std.log.debug("Glyph instance: position = {d},{d} ({d},{d})", .{ instance.position[0], instance.position[1], textX, textY });
+            textX += xAdvance;
+            textY += yAdvance;
         }
         gl.textureImage2D(.@"2d", 0, .red, textureDim, textureDim, .red, .unsigned_byte, &ftTextureBuffer);
     }
@@ -755,7 +758,8 @@ pub fn main() anyerror!void {
             \\void main()
             \\{
             \\    vec4 t = texture( textureSampler, data.texture0 );
-            \\    outColor = data.color * t.r;
+            \\    outColor = data.color;
+            \\    outColor.a *= t.r;
             \\}
             \\
             \\
@@ -848,6 +852,7 @@ const FontTextureAtlas = struct {
     pub const Slot = struct {
         position: [2]u16,
         size: [2]u16,
+        offset: [2]i16,
     };
     pub const Shelf = struct {
         offset: u16,
@@ -860,7 +865,7 @@ const FontTextureAtlas = struct {
         return self.glyphMap.get(key);
     }
 
-    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u32, glyph: u32, width: u16, height: u16) !Slot {
+    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u32, glyph: u32, width: u16, height: u16, top: i16, left: i16) !Slot {
         std.log.debug("Insert glyph {d}, width = {d}, height = {d}", .{ glyph, width, height });
         const slotWidth = width + 1;
         const slotHeight = ((height + 4) / 5) * 5 + 1;
@@ -878,7 +883,7 @@ const FontTextureAtlas = struct {
             if (shelf.height >= slotHeight and shelf.remaining >= slotWidth) {
                 std.log.debug("Glyph height {d} will fit in shelf {d} height {d}", .{ slotHeight, index, shelf.height });
                 defer shelf.remaining -= slotWidth;
-                break Slot{ .position = .{ Size - shelf.remaining, shelf.offset }, .size = .{ width, height } };
+                break Slot{ .position = .{ Size - shelf.remaining, shelf.offset }, .size = .{ width, height }, .offset = .{ left, top } };
             }
             nextOffset += shelf.height;
         } else blk: {
@@ -894,7 +899,7 @@ const FontTextureAtlas = struct {
                 .height = slotHeight,
                 .remaining = Size - slotWidth,
             };
-            break :blk Slot{ .position = .{ 0, shelf.offset }, .size = .{ width, height } };
+            break :blk Slot{ .position = .{ 0, shelf.offset }, .size = .{ width, height }, .offset = .{ left, top } };
         };
 
         std.log.debug("Added to atlas: font = {d}, glyph = {d}, data = {}", .{ font, glyph, slot });
