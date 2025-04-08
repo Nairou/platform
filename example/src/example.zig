@@ -73,8 +73,6 @@ var ftBuffer: [6]TempVertex = [_]TempVertex{
     .{ .position = .{ 1424, 1424 }, .texture = .{ 1, 1 } },
     .{ .position = .{ 1424, 400 }, .texture = .{ 1, 0 } },
 };
-var ftTextureId: gl.Texture = undefined;
-var ftTextureBuffer: [1024 * 1024]u8 = @splat(0);
 var ftVertexShader: gl.Shader = undefined;
 var ftFragmentShader: gl.Shader = undefined;
 var ftShaderProgram: gl.Program = undefined;
@@ -100,181 +98,8 @@ var textUniformWindowSize: ?u32 = undefined;
 var textUniformTextureSampler0: ?u32 = undefined;
 
 var atlas: FontTextureAtlas = .{};
+var atlasTextureId: gl.Texture = undefined;
 
-fn hbCallbackGetHExtents(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, extents: [*c]harfbuzz.c.hb_font_extents_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = extents;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_h_extents", .{});
-    return 0;
-}
-fn hbCallbackGetVExtents(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, extents: [*c]harfbuzz.c.hb_font_extents_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = extents;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_v_extents", .{});
-    return 0;
-}
-fn hbCallbackGetNominalGlyph(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, unicode: harfbuzz.c.hb_codepoint_t, glyph: [*c]harfbuzz.c.hb_codepoint_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = unicode;
-    _ = glyph;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_nominal_glyph", .{});
-    return 0;
-}
-fn hbCallbackGetNominalGlyphs(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, count: u32, first_unicode: [*c]const harfbuzz.c.hb_codepoint_t, unicode_stride: u32, first_glyph: [*c]harfbuzz.c.hb_codepoint_t, glyph_stride: u32, user_data: ?*anyopaque) callconv(.C) u32 {
-    _ = font;
-    _ = font_data;
-    _ = count;
-    _ = first_unicode;
-    _ = unicode_stride;
-    _ = first_glyph;
-    _ = glyph_stride;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_nominal_glyphs", .{});
-    return 0;
-}
-fn hbCallbackGetVariationGlyph(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, unicode: harfbuzz.c.hb_codepoint_t, variation_selector: harfbuzz.c.hb_codepoint_t, glyph: [*c]harfbuzz.c.hb_codepoint_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = unicode;
-    _ = variation_selector;
-    _ = glyph;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_variation_glyph", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphHAdvance(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, user_data: ?*anyopaque) callconv(.C) harfbuzz.c.hb_position_t {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_h_advance", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphVAdvance(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, user_data: ?*anyopaque) callconv(.C) harfbuzz.c.hb_position_t {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_v_advance", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphHAdvances(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, count: u32, first_glyph: [*c]const harfbuzz.c.hb_codepoint_t, glyph_stride: u32, first_advance: [*c]harfbuzz.c.hb_position_t, advance_stride: u32, user_data: ?*anyopaque) callconv(.C) void {
-    _ = font;
-    _ = font_data;
-    _ = count;
-    _ = first_glyph;
-    _ = glyph_stride;
-    _ = first_advance;
-    _ = advance_stride;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_h_advances", .{});
-}
-fn hbCallbackGetGlyphVAdvances(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, count: u32, first_glyph: [*c]const harfbuzz.c.hb_codepoint_t, glyph_stride: u32, first_advance: [*c]harfbuzz.c.hb_position_t, advance_stride: u32, user_data: ?*anyopaque) callconv(.C) void {
-    _ = font;
-    _ = font_data;
-    _ = count;
-    _ = first_glyph;
-    _ = glyph_stride;
-    _ = first_advance;
-    _ = advance_stride;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_v_advances", .{});
-}
-fn hbCallbackGetGlyphHOrigin(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, x: [*c]harfbuzz.c.hb_position_t, y: [*c]harfbuzz.c.hb_position_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = x;
-    _ = y;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_h_origin", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphVOrigin(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, x: [*c]harfbuzz.c.hb_position_t, y: [*c]harfbuzz.c.hb_position_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = x;
-    _ = y;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_v_origin", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphHKerning(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, left_glyph: harfbuzz.c.hb_codepoint_t, right_glyph: harfbuzz.c.hb_codepoint_t, user_data: ?*anyopaque) callconv(.C) harfbuzz.c.hb_position_t {
-    _ = font;
-    _ = font_data;
-    _ = left_glyph;
-    _ = right_glyph;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_h_kerning", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphExtents(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, extents: [*c]harfbuzz.c.hb_glyph_extents_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = extents;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_extents", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphContourPoint(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, point_index: u32, x: [*c]harfbuzz.c.hb_position_t, y: [*c]harfbuzz.c.hb_position_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = point_index;
-    _ = x;
-    _ = y;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_contour_point", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphName(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, name: [*c]u8, size: u32, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = name;
-    _ = size;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_name", .{});
-    return 0;
-}
-fn hbCallbackGetGlyphFromName(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, name: [*c]const u8, len: i32, glyph: [*c]harfbuzz.c.hb_codepoint_t, user_data: ?*anyopaque) callconv(.C) i32 {
-    _ = font;
-    _ = font_data;
-    _ = name;
-    _ = len;
-    _ = glyph;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: get_glyph_from_name", .{});
-    return 0;
-}
-fn hbCallbackDrawGlyph(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, dfuncs: ?*harfbuzz.c.hb_draw_funcs_t, draw_data: ?*anyopaque, user_data: ?*anyopaque) callconv(.C) void {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = dfuncs;
-    _ = draw_data;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: draw_glyph", .{});
-}
-fn hbCallbackPaintGlyph(font: ?*harfbuzz.c.hb_font_t, font_data: ?*anyopaque, glyph: harfbuzz.c.hb_codepoint_t, pfuncs: ?*harfbuzz.c.hb_paint_funcs_t, paint_data: ?*anyopaque, palette_index: u32, foreground: harfbuzz.c.hb_color_t, user_data: ?*anyopaque) callconv(.C) void {
-    _ = font;
-    _ = font_data;
-    _ = glyph;
-    _ = pfuncs;
-    _ = paint_data;
-    _ = palette_index;
-    _ = foreground;
-    _ = user_data;
-    std.log.debug("Harfbuzz CALLBACK: paint_glyph", .{});
-}
 fn hbCallbackReferenceTables(face: ?*harfbuzz.c.hb_face_t, tag: harfbuzz.c.hb_tag_t, user_data: ?*anyopaque) callconv(.C) ?*harfbuzz.c.hb_blob_t {
     _ = face;
     if (user_data == null) {
@@ -307,73 +132,8 @@ pub fn main() anyerror!void {
     _ = try platform.init(std.heap.page_allocator);
     defer platform.deinit();
 
-    var atlasAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer atlasAllocator.deinit();
-
-    var textAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer textAllocator.deinit();
-
-    var ftLib: freetype.c.FT_Library = undefined;
-    _ = freetype.c.FT_Init_FreeType(&ftLib);
-    var ftFace: freetype.c.FT_Face = undefined;
-    _ = freetype.c.FT_New_Face(ftLib, "Roboto-Medium.ttf", 0, &ftFace);
-    std.log.debug("FT_Face num_glyphs = {d}", .{ftFace.*.num_glyphs});
-    _ = freetype.c.FT_Set_Char_Size(ftFace, 0, 48 * 64, 0, 72);
-
-    var callbackData: CallbackFaceAllocator = .{
-        .allocator = std.heap.page_allocator,
-        .face = ftFace,
-    };
-    const face = harfbuzz.c.hb_face_create_for_tables(hbCallbackReferenceTables, @ptrCast(&callbackData), null);
-    defer harfbuzz.c.hb_face_destroy(face);
-    const font = harfbuzz.c.hb_font_create(face);
-    defer harfbuzz.c.hb_font_destroy(font);
-
-    //const hbCallbacks = harfbuzz.c.hb_font_funcs_create();
-    //harfbuzz.c.hb_font_funcs_set_font_h_extents_func(hbCallbacks, hbCallbackGetHExtents, null, null);
-    //harfbuzz.c.hb_font_funcs_set_font_v_extents_func(hbCallbacks, hbCallbackGetVExtents, null, null);
-    //harfbuzz.c.hb_font_funcs_set_nominal_glyph_func(hbCallbacks, hbCallbackGetNominalGlyph, null, null);
-    //harfbuzz.c.hb_font_funcs_set_nominal_glyphs_func(hbCallbacks, hbCallbackGetNominalGlyphs, null, null);
-    //harfbuzz.c.hb_font_funcs_set_variation_glyph_func(hbCallbacks, hbCallbackGetVariationGlyph, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_h_advance_func(hbCallbacks, hbCallbackGetGlyphHAdvance, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_v_advance_func(hbCallbacks, hbCallbackGetGlyphVAdvance, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_h_advances_func(hbCallbacks, hbCallbackGetGlyphHAdvances, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_v_advances_func(hbCallbacks, hbCallbackGetGlyphVAdvances, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_h_origin_func(hbCallbacks, hbCallbackGetGlyphHOrigin, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_v_origin_func(hbCallbacks, hbCallbackGetGlyphVOrigin, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_h_kerning_func(hbCallbacks, hbCallbackGetGlyphHKerning, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_extents_func(hbCallbacks, hbCallbackGetGlyphExtents, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_contour_point_func(hbCallbacks, hbCallbackGetGlyphContourPoint, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_name_func(hbCallbacks, hbCallbackGetGlyphName, null, null);
-    //harfbuzz.c.hb_font_funcs_set_glyph_from_name_func(hbCallbacks, hbCallbackGetGlyphFromName, null, null);
-    //harfbuzz.c.hb_font_funcs_set_draw_glyph_func(hbCallbacks, hbCallbackDrawGlyph, null, null);
-    //harfbuzz.c.hb_font_funcs_set_paint_glyph_func(hbCallbacks, hbCallbackPaintGlyph, null, null);
-    //harfbuzz.c.hb_font_funcs_make_immutable(hbCallbacks);
-
-    //const subfont = harfbuzz.c.hb_font_create_sub_font(font);
-    //harfbuzz.c.hb_font_set_funcs(subfont, hbCallbacks, ftFace, null);
-    //harfbuzz.c.hb_font_funcs_destroy(hbCallbacks);
-
-    const xScale: u64 = (@as(u64, @intCast(ftFace.*.size.*.metrics.x_scale)) * @as(u64, @intCast(ftFace.*.units_per_EM)) + (1 << 15)) >> 16;
-    const yScale: u64 = (@as(u64, @intCast(ftFace.*.size.*.metrics.y_scale)) * @as(u64, @intCast(ftFace.*.units_per_EM)) + (1 << 15)) >> 16;
-    std.log.debug("FT: scale = {d}, {d}, unitsPerEM = {d}", .{ ftFace.*.size.*.metrics.x_scale, ftFace.*.size.*.metrics.y_scale, ftFace.*.units_per_EM });
-    std.log.debug("Scale: {d}, {d}", .{ xScale, yScale });
-    harfbuzz.c.hb_font_set_scale(font, @intCast(xScale), @intCast(yScale));
-
-    const buffer = harfbuzz.c.hb_buffer_create();
-    defer harfbuzz.c.hb_buffer_destroy(buffer);
-    harfbuzz.c.hb_buffer_add_utf8(buffer, "Hello, World! Totally awesome...", -1, 0, -1);
-    harfbuzz.c.hb_buffer_set_direction(buffer, harfbuzz.c.HB_DIRECTION_LTR);
-    harfbuzz.c.hb_buffer_set_script(buffer, harfbuzz.c.HB_SCRIPT_LATIN);
-    harfbuzz.c.hb_buffer_set_language(buffer, harfbuzz.c.hb_language_from_string("en", -1));
-
-    harfbuzz.c.hb_shape(font, buffer, 0, 0);
-    var glyphCount: u32 = 0;
-    const glyphInfo = harfbuzz.c.hb_buffer_get_glyph_infos(buffer, &glyphCount);
-    const glyphPos = harfbuzz.c.hb_buffer_get_glyph_positions(buffer, &glyphCount);
-
-    const tempGlyphCount = harfbuzz.c.hb_face_get_glyph_count(face);
-    std.log.debug("glyph_count result: {d}", .{tempGlyphCount});
+    var fontAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer fontAllocator.deinit();
 
     const glSetup = struct {
         pub fn glGetProcAddress(comptime _: type, proc: [:0]const u8) ?*const anyopaque {
@@ -637,61 +397,13 @@ pub fn main() anyerror!void {
         ftUniformWindowSize = ftShaderProgram.uniformLocation("WindowSize");
         ftUniformTextureSampler0 = ftShaderProgram.uniformLocation("TextureSampler");
 
-        ftTextureId = gl.genTexture();
-        ftTextureId.bind(.@"2d");
+        atlasTextureId = gl.genTexture();
+        atlasTextureId.bind(.@"2d");
         gl.texParameter(.@"2d", .min_filter, gl.TextureParameterType(.min_filter).nearest);
         gl.texParameter(.@"2d", .mag_filter, gl.TextureParameterType(.mag_filter).nearest);
         gl.texParameter(.@"2d", .wrap_r, gl.TextureParameterType(.wrap_r).repeat);
         gl.texParameter(.@"2d", .wrap_s, gl.TextureParameterType(.wrap_s).repeat);
         gl.texParameter(.@"2d", .wrap_t, gl.TextureParameterType(.wrap_t).repeat);
-
-        const textureDim = 1024;
-
-        std.log.debug("Glyph count: {d}", .{glyphCount});
-        var textX: f32 = 100;
-        var textY: f32 = 100;
-        for (0..glyphCount) |i| {
-            const glyphId = glyphInfo[i].codepoint;
-
-            _ = freetype.c.FT_Load_Glyph(ftFace, glyphInfo[i].codepoint, freetype.c.FT_LOAD_RENDER | freetype.c.FT_LOAD_NO_HINTING);
-            const glyph = ftFace.*.glyph.*;
-            const slot = atlas.getGlyph(123, glyphId) orelse blk: {
-                const slot = try atlas.insertGlyph(atlasAllocator.allocator(), 123, glyphId, @intCast(glyph.bitmap.width), @intCast(glyph.bitmap.rows), @intCast(glyph.bitmap_top), @intCast(glyph.bitmap_left));
-                std.log.debug("Atlas: slot = {}", .{slot});
-                std.log.debug("FT: advance = {d}, {d}", .{ glyph.advance.x, glyph.advance.y });
-                //gl.texSubImage2D(.@"2d", 0, 20, 20, @abs(glyph.bitmap.pitch), glyph.bitmap.rows, .red, .unsigned_byte, glyph.bitmap.buffer);
-                var source: usize = 0;
-                var destination: usize = @as(u32, slot.position[1]) * textureDim + @as(u32, slot.position[0]);
-                for (0..glyph.bitmap.rows) |_| {
-                    for (0..glyph.bitmap.width) |x| {
-                        ftTextureBuffer[destination + x] = glyph.bitmap.buffer[source + x];
-                    }
-                    source += @abs(glyph.bitmap.pitch);
-                    destination += textureDim;
-                }
-                break :blk slot;
-            };
-
-            const xOffset = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / 64;
-            const yOffset = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / 64;
-            const xAdvance = @as(f32, @floatFromInt(glyphPos[i].x_advance)) / 64;
-            const yAdvance = @as(f32, @floatFromInt(glyphPos[i].y_advance)) / 64;
-            //const xBearing = @as(f32, @floatFromInt(glyph.metrics.horiBearingX)) / 64;
-            //const yBearing = @as(f32, @floatFromInt(glyph.metrics.horiBearingY)) / 64;
-            std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
-
-            const instance = try textInstanceBuffer.addOne(textAllocator.allocator());
-            instance.* = .{
-                .position = .{ textX + xOffset + @as(f32, @floatFromInt(slot.offset[0])), textY + yOffset - @as(f32, @floatFromInt(slot.offset[1])) },
-                .size = .{ @floatFromInt(slot.size[0]), @floatFromInt(slot.size[1]) },
-                .texture = .{ @floatFromInt(slot.position[0]), @floatFromInt(slot.position[1]) },
-                .color = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
-            };
-            std.log.debug("Glyph instance: position = {d},{d} ({d},{d})", .{ instance.position[0], instance.position[1], textX, textY });
-            textX += xAdvance;
-            textY += yAdvance;
-        }
-        gl.textureImage2D(.@"2d", 0, .red, textureDim, textureDim, .red, .unsigned_byte, &ftTextureBuffer);
     }
 
     { // Text init
@@ -810,8 +522,20 @@ pub fn main() anyerror!void {
 
         textUniformModelViewProj = textShaderProgram.uniformLocation("ModelViewProj");
         textUniformWindowSize = textShaderProgram.uniformLocation("WindowSize");
-        textUniformTextureSampler0 = ftShaderProgram.uniformLocation("TextureSampler");
+        textUniformTextureSampler0 = textShaderProgram.uniformLocation("TextureSampler");
     }
+
+    const testFont1 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 48, 72);
+    defer testFont1.free();
+    try testFont1.shapeText("Hello, World!", 100, 100, &atlas, &textInstanceBuffer);
+
+    const testFont2 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 24, 72);
+    defer testFont2.free();
+    try testFont2.shapeText("Hello, World!", 100, 150, &atlas, &textInstanceBuffer);
+
+    const testFont3 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 12, 72);
+    defer testFont3.free();
+    try testFont3.shapeText("Hello, World!", 100, 180, &atlas, &textInstanceBuffer);
 
     draw(window.id);
 
@@ -842,11 +566,13 @@ pub fn main() anyerror!void {
 const FontTextureAtlas = struct {
     glyphMap: std.AutoHashMapUnmanaged(Key, Slot) = .empty,
     shelves: std.ArrayListUnmanaged(Shelf) = .empty,
+    textureBuffer: [TextureSize * TextureSize]u8 = @splat(0),
+    textureDirty: bool = false,
 
-    const Size = 1024;
+    const TextureSize = 1024;
 
     pub const Key = struct {
-        font: u32,
+        font: u64,
         glyph: u32,
     };
     pub const Slot = struct {
@@ -860,17 +586,17 @@ const FontTextureAtlas = struct {
         remaining: u16,
     };
 
-    pub fn getGlyph(self: *FontTextureAtlas, font: u32, glyph: u32) ?Slot {
+    pub fn getGlyph(self: *FontTextureAtlas, font: u64, glyph: u32) ?Slot {
         const key: Key = .{ .font = font, .glyph = glyph };
         return self.glyphMap.get(key);
     }
 
-    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u32, glyph: u32, width: u16, height: u16, top: i16, left: i16) !Slot {
+    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u64, glyph: u32, width: u16, height: u16, top: i16, left: i16) !Slot {
         std.log.debug("Insert glyph {d}, width = {d}, height = {d}", .{ glyph, width, height });
         const slotWidth = width + 1;
         const slotHeight = ((height + 4) / 5) * 5 + 1;
-        std.debug.assert(slotWidth < Size);
-        std.debug.assert(slotHeight < Size);
+        std.debug.assert(slotWidth < TextureSize);
+        std.debug.assert(slotHeight < TextureSize);
         const key: Key = .{ .font = font, .glyph = glyph };
         if (self.glyphMap.get(key)) |slot| {
             std.log.debug("Already exists in atlas: font = {d}, glyph = {d}", .{ font, glyph });
@@ -883,13 +609,13 @@ const FontTextureAtlas = struct {
             if (shelf.height >= slotHeight and shelf.remaining >= slotWidth) {
                 std.log.debug("Glyph height {d} will fit in shelf {d} height {d}", .{ slotHeight, index, shelf.height });
                 defer shelf.remaining -= slotWidth;
-                break Slot{ .position = .{ Size - shelf.remaining, shelf.offset }, .size = .{ width, height }, .offset = .{ left, top } };
+                break Slot{ .position = .{ TextureSize - shelf.remaining, shelf.offset }, .size = .{ width, height }, .offset = .{ left, top } };
             }
             nextOffset += shelf.height;
         } else blk: {
             std.log.debug("Glyph height {d} fit no shelves, adding new shelf, offset = {d}", .{ height, nextOffset });
-            std.debug.assert(nextOffset <= Size);
-            if (Size - nextOffset < slotHeight) {
+            std.debug.assert(nextOffset <= TextureSize);
+            if (TextureSize - nextOffset < slotHeight) {
                 return error.AtlasIsFull;
             }
 
@@ -897,7 +623,7 @@ const FontTextureAtlas = struct {
             shelf.* = .{
                 .offset = nextOffset,
                 .height = slotHeight,
-                .remaining = Size - slotWidth,
+                .remaining = TextureSize - slotWidth,
             };
             break :blk Slot{ .position = .{ 0, shelf.offset }, .size = .{ width, height }, .offset = .{ left, top } };
         };
@@ -906,6 +632,122 @@ const FontTextureAtlas = struct {
 
         try self.glyphMap.put(allocator, key, slot);
         return slot;
+    }
+};
+
+//const FontBackendFreetype = struct {
+//    library: freetype.c.FT_Library,
+//
+//    pub fn init(self: *FontBackendFreetype) void {
+//        _ = freetype.c.FT_Init_FreeType(&self.library);
+//    }
+//};
+//pub fn FontBackendType() type {
+//    return FontBackendFreetype;
+//}
+//const fontBackend: FontBackendType() = null;
+var ftLib: freetype.c.FT_Library = null;
+
+const Font = struct {
+    allocator: std.mem.Allocator,
+    id: u64,
+    ftFace: freetype.c.FT_Face,
+    hbFont: ?*harfbuzz.c.hb_font_t,
+    callbackData: CallbackFaceAllocator,
+
+    pub fn create(allocator: std.mem.Allocator, fileName: [:0]const u8, pointSize: u32, dpi: u32) !*Font {
+        // TODO: Error handling
+        if (ftLib == null) {
+            _ = freetype.c.FT_Init_FreeType(&ftLib);
+        }
+
+        const fingerprint = .{
+            .fileName = fileName,
+            .pointSize = pointSize,
+            .dpi = dpi,
+        };
+        var newFont = try allocator.create(Font);
+        newFont.allocator = allocator;
+        newFont.id = std.hash.Wyhash.hash(0, std.mem.asBytes(&fingerprint));
+
+        _ = freetype.c.FT_New_Face(ftLib, fileName, 0, &newFont.ftFace);
+        _ = freetype.c.FT_Set_Char_Size(newFont.ftFace, 0, pointSize * 64, 0, dpi);
+
+        newFont.callbackData = .{
+            .allocator = newFont.allocator,
+            .face = newFont.ftFace,
+        };
+        const hbFace = harfbuzz.c.hb_face_create_for_tables(hbCallbackReferenceTables, @ptrCast(&newFont.callbackData), null);
+        newFont.hbFont = harfbuzz.c.hb_font_create(hbFace);
+        harfbuzz.c.hb_face_destroy(hbFace);
+
+        const xScale: u64 = (@as(u64, @intCast(newFont.ftFace.*.size.*.metrics.x_scale)) * @as(u64, @intCast(newFont.ftFace.*.units_per_EM)) + (1 << 15)) >> 16;
+        const yScale: u64 = (@as(u64, @intCast(newFont.ftFace.*.size.*.metrics.y_scale)) * @as(u64, @intCast(newFont.ftFace.*.units_per_EM)) + (1 << 15)) >> 16;
+        harfbuzz.c.hb_font_set_scale(newFont.hbFont, @intCast(xScale), @intCast(yScale));
+
+        return newFont;
+    }
+
+    pub fn free(self: *Font) void {
+        harfbuzz.c.hb_font_destroy(self.hbFont);
+        self.allocator.destroy(self);
+    }
+
+    pub fn shapeText(self: *Font, text: [:0]const u8, x: f32, y: f32, textureAtlas: *FontTextureAtlas, outputBuffer: *std.ArrayListUnmanaged(TextInstance)) !void {
+        const buffer = harfbuzz.c.hb_buffer_create();
+        defer harfbuzz.c.hb_buffer_destroy(buffer);
+        harfbuzz.c.hb_buffer_add_utf8(buffer, text, -1, 0, -1);
+        harfbuzz.c.hb_buffer_set_direction(buffer, harfbuzz.c.HB_DIRECTION_LTR);
+        harfbuzz.c.hb_buffer_set_script(buffer, harfbuzz.c.HB_SCRIPT_LATIN);
+        harfbuzz.c.hb_buffer_set_language(buffer, harfbuzz.c.hb_language_from_string("en", -1));
+
+        harfbuzz.c.hb_shape(self.hbFont, buffer, 0, 0);
+        var glyphCount: u32 = 0;
+        const glyphInfo = harfbuzz.c.hb_buffer_get_glyph_infos(buffer, &glyphCount);
+        const glyphPos = harfbuzz.c.hb_buffer_get_glyph_positions(buffer, &glyphCount);
+
+        var textX = x;
+        var textY = y;
+        for (0..glyphCount) |i| {
+            const glyphId = glyphInfo[i].codepoint;
+
+            _ = freetype.c.FT_Load_Glyph(self.ftFace, glyphInfo[i].codepoint, freetype.c.FT_LOAD_RENDER | freetype.c.FT_LOAD_NO_HINTING);
+            const glyph = self.ftFace.*.glyph.*;
+            const slot = textureAtlas.getGlyph(self.id, glyphId) orelse blk: {
+                const slot = try textureAtlas.insertGlyph(self.allocator, self.id, glyphId, @intCast(glyph.bitmap.width), @intCast(glyph.bitmap.rows), @intCast(glyph.bitmap_top), @intCast(glyph.bitmap_left));
+                std.log.debug("Atlas: slot = {}", .{slot});
+                std.log.debug("FT: advance = {d}, {d}", .{ glyph.advance.x, glyph.advance.y });
+                //gl.texSubImage2D(.@"2d", 0, 20, 20, @abs(glyph.bitmap.pitch), glyph.bitmap.rows, .red, .unsigned_byte, glyph.bitmap.buffer);
+                var source: usize = 0;
+                var destination: usize = @as(u32, slot.position[1]) * FontTextureAtlas.TextureSize + @as(u32, slot.position[0]);
+                for (0..glyph.bitmap.rows) |_| {
+                    for (0..glyph.bitmap.width) |xpos| {
+                        textureAtlas.textureBuffer[destination + xpos] = glyph.bitmap.buffer[source + xpos];
+                    }
+                    source += @abs(glyph.bitmap.pitch);
+                    destination += FontTextureAtlas.TextureSize;
+                }
+                atlas.textureDirty = true;
+                break :blk slot;
+            };
+
+            const xOffset = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / 64;
+            const yOffset = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / 64;
+            const xAdvance = @as(f32, @floatFromInt(glyphPos[i].x_advance)) / 64;
+            const yAdvance = @as(f32, @floatFromInt(glyphPos[i].y_advance)) / 64;
+            std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
+
+            const instance = try outputBuffer.addOne(self.allocator);
+            instance.* = .{
+                .position = .{ textX + xOffset + @as(f32, @floatFromInt(slot.offset[0])), textY + yOffset - @as(f32, @floatFromInt(slot.offset[1])) },
+                .size = .{ @floatFromInt(slot.size[0]), @floatFromInt(slot.size[1]) },
+                .texture = .{ @floatFromInt(slot.position[0]), @floatFromInt(slot.position[1]) },
+                .color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+            };
+            std.log.debug("Glyph instance: position = {d},{d} ({d},{d})", .{ instance.position[0], instance.position[1], textX, textY });
+            textX += xAdvance;
+            textY += yAdvance;
+        }
     }
 };
 
@@ -935,12 +777,16 @@ fn draw(windowId: platform.WindowId) void {
             gl.useProgram(textShaderProgram);
             gl.uniform2i(textUniformWindowSize, @intCast(windowWidth), @intCast(windowHeight));
 
+            if (atlas.textureDirty) {
+                gl.textureImage2D(.@"2d", 0, .red, FontTextureAtlas.TextureSize, FontTextureAtlas.TextureSize, .red, .unsigned_byte, &atlas.textureBuffer);
+                atlas.textureDirty = false;
+            }
             textVao.bind();
             textInstanceVbo.bind(gl.BufferTarget.array_buffer);
             gl.bufferData(gl.BufferTarget.array_buffer, TextInstance, textInstanceBuffer.items[0..textInstanceBuffer.items.len], gl.BufferUsage.dynamic_draw);
-            gl.uniform1i(ftUniformTextureSampler0, 0);
+            gl.uniform1i(textUniformTextureSampler0, 0);
             gl.activeTexture(gl.TextureUnit.texture_0);
-            ftTextureId.bind(gl.TextureTarget.@"2d");
+            atlasTextureId.bind(gl.TextureTarget.@"2d");
             gl.drawArraysInstanced(gl.PrimitiveType.triangle_fan, 0, 4, textInstanceBuffer.items.len);
 
             gl.useProgram(ftShaderProgram);
@@ -950,7 +796,7 @@ fn draw(windowId: platform.WindowId) void {
             ftVbo.bind(gl.BufferTarget.array_buffer);
             gl.uniform1i(ftUniformTextureSampler0, 0);
             gl.activeTexture(gl.TextureUnit.texture_0);
-            ftTextureId.bind(gl.TextureTarget.@"2d");
+            atlasTextureId.bind(gl.TextureTarget.@"2d");
             gl.drawArrays(gl.PrimitiveType.triangles, 0, 6);
         }
 
