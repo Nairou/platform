@@ -5,6 +5,8 @@ const freetype = @import("freetype");
 const platform = @import("platform");
 const gl = @import("zgl");
 
+pub const fp246 = i32;
+
 pub const Color = packed struct {
     r: f32,
     g: f32,
@@ -527,15 +529,6 @@ pub fn main() anyerror!void {
 
     const testFont1 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 48, 72);
     defer testFont1.free();
-    try testFont1.shapeText("Hello, World!", 100, 100, &atlas, &textInstanceBuffer);
-
-    const testFont2 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 24, 72);
-    defer testFont2.free();
-    try testFont2.shapeText("Hello, World!", 100, 150, &atlas, &textInstanceBuffer);
-
-    const testFont3 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 12, 72);
-    defer testFont3.free();
-    try testFont3.shapeText("Hello, World!", 100, 180, &atlas, &textInstanceBuffer);
 
     draw(window.id);
 
@@ -545,6 +538,21 @@ pub fn main() anyerror!void {
             switch (event) {
                 .window_refresh => |window_refresh| {
                     gradient += 0.001;
+
+                    textInstanceBuffer.clearRetainingCapacity();
+                    var sampleTextBuffer: [1024]u8 = @splat(0);
+                    const sampleTextX: i32 = @intFromFloat((100.0 + @sin(gradient) * 50.0) * 64);
+                    const sampleText = try std.fmt.bufPrintZ(&sampleTextBuffer, "Hello, World! ... x = {d}, gradient = {d}", .{ sampleTextX, gradient });
+                    try testFont1.shapeText(sampleText, sampleTextX, 100 * 64, &atlas, &textInstanceBuffer);
+
+                    const testFont2 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 24, 72);
+                    defer testFont2.free();
+                    try testFont2.shapeText("Hello, World!", sampleTextX, 150 * 64, &atlas, &textInstanceBuffer);
+
+                    const testFont3 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 12, 72);
+                    defer testFont3.free();
+                    try testFont3.shapeText("Hello, World!", sampleTextX, 180 * 64, &atlas, &textInstanceBuffer);
+
                     draw(window_refresh.window);
                 },
                 .window_close => |_| {
@@ -574,6 +582,7 @@ const FontTextureAtlas = struct {
     pub const Key = struct {
         font: u64,
         glyph: u32,
+        offsetIndex: u4,
     };
     pub const Slot = struct {
         position: [2]u16,
@@ -586,18 +595,18 @@ const FontTextureAtlas = struct {
         remaining: u16,
     };
 
-    pub fn getGlyph(self: *FontTextureAtlas, font: u64, glyph: u32) ?Slot {
-        const key: Key = .{ .font = font, .glyph = glyph };
+    pub fn getGlyph(self: *FontTextureAtlas, font: u64, glyph: u32, offsetIndex: u4) ?Slot {
+        const key: Key = .{ .font = font, .glyph = glyph, .offsetIndex = offsetIndex };
         return self.glyphMap.get(key);
     }
 
-    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u64, glyph: u32, width: u16, height: u16, top: i16, left: i16) !Slot {
+    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u64, glyph: u32, offsetIndex: u4, width: u16, height: u16, top: i16, left: i16) !Slot {
         std.log.debug("Insert glyph {d}, width = {d}, height = {d}", .{ glyph, width, height });
         const slotWidth = width + 1;
         const slotHeight = ((height + 4) / 5) * 5 + 1;
         std.debug.assert(slotWidth < TextureSize);
         std.debug.assert(slotHeight < TextureSize);
-        const key: Key = .{ .font = font, .glyph = glyph };
+        const key: Key = .{ .font = font, .glyph = glyph, .offsetIndex = offsetIndex };
         if (self.glyphMap.get(key)) |slot| {
             std.log.debug("Already exists in atlas: font = {d}, glyph = {d}", .{ font, glyph });
             return slot;
@@ -693,7 +702,7 @@ const Font = struct {
         self.allocator.destroy(self);
     }
 
-    pub fn shapeText(self: *Font, text: [:0]const u8, x: f32, y: f32, textureAtlas: *FontTextureAtlas, outputBuffer: *std.ArrayListUnmanaged(TextInstance)) !void {
+    pub fn shapeText(self: *Font, text: [:0]const u8, x: fp246, y: fp246, textureAtlas: *FontTextureAtlas, outputBuffer: *std.ArrayListUnmanaged(TextInstance)) !void {
         const buffer = harfbuzz.c.hb_buffer_create();
         defer harfbuzz.c.hb_buffer_destroy(buffer);
         harfbuzz.c.hb_buffer_add_utf8(buffer, text, -1, 0, -1);
@@ -710,11 +719,21 @@ const Font = struct {
         var textY = y;
         for (0..glyphCount) |i| {
             const glyphId = glyphInfo[i].codepoint;
+            const glyphOffsetX = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / 64;
+            const glyphOffsetY = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / 64;
+            //std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
 
+            const subX: u2 = @truncate(@abs(textX) / 16);
+            const subY: u2 = @truncate(@abs(textY) / 16);
+            const offsetIndex = @as(u4, subY) * 4 + subX;
+            //std.log.debug("Glyph {d}: id = {d}, textX = {d} ({d}), textY = {d} ({d})", .{ i, glyphId, textX, subX, textY, subY });
+
+            var delta: freetype.c.FT_Vector = .{ .x = @as(i32, subX) * 16, .y = @as(i32, subY) * 16 };
+            freetype.c.FT_Set_Transform(self.ftFace, null, &delta);
             _ = freetype.c.FT_Load_Glyph(self.ftFace, glyphInfo[i].codepoint, freetype.c.FT_LOAD_RENDER | freetype.c.FT_LOAD_NO_HINTING);
             const glyph = self.ftFace.*.glyph.*;
-            const slot = textureAtlas.getGlyph(self.id, glyphId) orelse blk: {
-                const slot = try textureAtlas.insertGlyph(self.allocator, self.id, glyphId, @intCast(glyph.bitmap.width), @intCast(glyph.bitmap.rows), @intCast(glyph.bitmap_top), @intCast(glyph.bitmap_left));
+            const slot = textureAtlas.getGlyph(self.id, glyphId, offsetIndex) orelse blk: {
+                const slot = try textureAtlas.insertGlyph(self.allocator, self.id, glyphId, offsetIndex, @intCast(glyph.bitmap.width), @intCast(glyph.bitmap.rows), @intCast(glyph.bitmap_top), @intCast(glyph.bitmap_left));
                 std.log.debug("Atlas: slot = {}", .{slot});
                 std.log.debug("FT: advance = {d}, {d}", .{ glyph.advance.x, glyph.advance.y });
                 //gl.texSubImage2D(.@"2d", 0, 20, 20, @abs(glyph.bitmap.pitch), glyph.bitmap.rows, .red, .unsigned_byte, glyph.bitmap.buffer);
@@ -731,22 +750,21 @@ const Font = struct {
                 break :blk slot;
             };
 
-            const xOffset = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / 64;
-            const yOffset = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / 64;
-            const xAdvance = @as(f32, @floatFromInt(glyphPos[i].x_advance)) / 64;
-            const yAdvance = @as(f32, @floatFromInt(glyphPos[i].y_advance)) / 64;
-            std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
-
+            const fx = @as(f32, @floatFromInt(@divTrunc(textX, 64)));
+            const fy = @as(f32, @floatFromInt(@divTrunc(textY, 64)));
             const instance = try outputBuffer.addOne(self.allocator);
             instance.* = .{
-                .position = .{ textX + xOffset + @as(f32, @floatFromInt(slot.offset[0])), textY + yOffset - @as(f32, @floatFromInt(slot.offset[1])) },
+                .position = .{
+                    fx + glyphOffsetX + @as(f32, @floatFromInt(slot.offset[0])),
+                    fy + glyphOffsetY - @as(f32, @floatFromInt(slot.offset[1])),
+                },
                 .size = .{ @floatFromInt(slot.size[0]), @floatFromInt(slot.size[1]) },
                 .texture = .{ @floatFromInt(slot.position[0]), @floatFromInt(slot.position[1]) },
                 .color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
             };
             std.log.debug("Glyph instance: position = {d},{d} ({d},{d})", .{ instance.position[0], instance.position[1], textX, textY });
-            textX += xAdvance;
-            textY += yAdvance;
+            textX += glyphPos[i].x_advance;
+            textY += glyphPos[i].y_advance;
         }
     }
 };
