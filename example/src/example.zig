@@ -5,7 +5,7 @@ const freetype = @import("freetype");
 const platform = @import("platform");
 const gl = @import("zgl");
 
-pub const fp246 = i32;
+pub const fp266 = i32;
 
 pub const Color = packed struct {
     r: f32,
@@ -542,16 +542,16 @@ pub fn main() anyerror!void {
                     textInstanceBuffer.clearRetainingCapacity();
                     var sampleTextBuffer: [1024]u8 = @splat(0);
                     const sampleTextX: i32 = @intFromFloat((100.0 + @sin(gradient) * 50.0) * 64);
-                    const sampleText = try std.fmt.bufPrintZ(&sampleTextBuffer, "Hello, World! ... x = {d}, gradient = {d}", .{ sampleTextX, gradient });
+                    const sampleText = try std.fmt.bufPrintZ(&sampleTextBuffer, "Hello, World! ... x = {d}, gradient = {d:.3}\nAnother line, which is also very long and can't fit on a single line\nThe End.", .{ sampleTextX, gradient });
                     try testFont1.shapeText(sampleText, sampleTextX, 100 * 64, &atlas, &textInstanceBuffer);
 
                     const testFont2 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 24, 72);
                     defer testFont2.free();
-                    try testFont2.shapeText("Hello, World!", sampleTextX, 150 * 64, &atlas, &textInstanceBuffer);
+                    try testFont2.shapeText("Hello, World!", sampleTextX, 250 * 64, &atlas, &textInstanceBuffer);
 
                     const testFont3 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 12, 72);
                     defer testFont3.free();
-                    try testFont3.shapeText("Hello, World!", sampleTextX, 180 * 64, &atlas, &textInstanceBuffer);
+                    try testFont3.shapeText("Hello, World!", sampleTextX, 280 * 64, &atlas, &textInstanceBuffer);
 
                     draw(window_refresh.window);
                 },
@@ -582,7 +582,7 @@ const FontTextureAtlas = struct {
     pub const Key = struct {
         font: u64,
         glyph: u32,
-        offsetIndex: u4,
+        offsetIndex: u16,
     };
     pub const Slot = struct {
         position: [2]u16,
@@ -595,12 +595,12 @@ const FontTextureAtlas = struct {
         remaining: u16,
     };
 
-    pub fn getGlyph(self: *FontTextureAtlas, font: u64, glyph: u32, offsetIndex: u4) ?Slot {
+    pub fn getGlyph(self: *FontTextureAtlas, font: u64, glyph: u32, offsetIndex: u16) ?Slot {
         const key: Key = .{ .font = font, .glyph = glyph, .offsetIndex = offsetIndex };
         return self.glyphMap.get(key);
     }
 
-    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u64, glyph: u32, offsetIndex: u4, width: u16, height: u16, top: i16, left: i16) !Slot {
+    pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u64, glyph: u32, offsetIndex: u16, width: u16, height: u16, top: i16, left: i16) !Slot {
         std.log.debug("Insert glyph {d}, width = {d}, height = {d}", .{ glyph, width, height });
         const slotWidth = width + 1;
         const slotHeight = ((height + 4) / 5) * 5 + 1;
@@ -664,6 +664,11 @@ const Font = struct {
     hbFont: ?*harfbuzz.c.hb_font_t,
     callbackData: CallbackFaceAllocator,
 
+    const decimalPrecision = 1 << 6; // 26.6
+    const maxSubPixelValues = 4;
+    const subpixelBits = std.math.log2_int(u32, maxSubPixelValues);
+    const uSubpixel = std.meta.Int(.unsigned, subpixelBits);
+
     pub fn create(allocator: std.mem.Allocator, fileName: [:0]const u8, pointSize: u32, dpi: u32) !*Font {
         // TODO: Error handling
         if (ftLib == null) {
@@ -702,7 +707,7 @@ const Font = struct {
         self.allocator.destroy(self);
     }
 
-    pub fn shapeText(self: *Font, text: [:0]const u8, x: fp246, y: fp246, textureAtlas: *FontTextureAtlas, outputBuffer: *std.ArrayListUnmanaged(TextInstance)) !void {
+    pub fn shapeText(self: *Font, text: [:0]const u8, x: fp266, y: fp266, textureAtlas: *FontTextureAtlas, outputBuffer: *std.ArrayListUnmanaged(TextInstance)) !void {
         const buffer = harfbuzz.c.hb_buffer_create();
         defer harfbuzz.c.hb_buffer_destroy(buffer);
         harfbuzz.c.hb_buffer_add_utf8(buffer, text, -1, 0, -1);
@@ -719,16 +724,18 @@ const Font = struct {
         var textY = y;
         for (0..glyphCount) |i| {
             const glyphId = glyphInfo[i].codepoint;
-            const glyphOffsetX = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / 64;
-            const glyphOffsetY = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / 64;
+            const glyphOffsetX = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / decimalPrecision;
+            const glyphOffsetY = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / decimalPrecision;
             //std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
 
-            const subX: u2 = @truncate(@abs(textX) / 16);
-            const subY: u2 = @truncate(@abs(textY) / 16);
-            const offsetIndex = @as(u4, subY) * 4 + subX;
+            const subpixelDivisor = @as(u32, decimalPrecision) / maxSubPixelValues;
+            const subX: uSubpixel = @truncate(@abs(textX) / subpixelDivisor);
+            const subY: uSubpixel = @truncate(@abs(textY) / subpixelDivisor);
+            std.log.debug("uSubpixel = {}, subpixelBits = {}, subX = {d}, subY = {d}, subpixelDivisor = {d}", .{ uSubpixel, subpixelBits, subX, subY, subpixelDivisor });
+            const offsetIndex = @as(u16, subY) * subpixelBits + subX;
             //std.log.debug("Glyph {d}: id = {d}, textX = {d} ({d}), textY = {d} ({d})", .{ i, glyphId, textX, subX, textY, subY });
 
-            var delta: freetype.c.FT_Vector = .{ .x = @as(i32, subX) * 16, .y = @as(i32, subY) * 16 };
+            var delta: freetype.c.FT_Vector = .{ .x = @as(i32, subX) * subpixelDivisor, .y = @as(i32, subY) * subpixelDivisor };
             freetype.c.FT_Set_Transform(self.ftFace, null, &delta);
             _ = freetype.c.FT_Load_Glyph(self.ftFace, glyphInfo[i].codepoint, freetype.c.FT_LOAD_RENDER | freetype.c.FT_LOAD_NO_HINTING);
             const glyph = self.ftFace.*.glyph.*;
@@ -750,8 +757,8 @@ const Font = struct {
                 break :blk slot;
             };
 
-            const fx = @as(f32, @floatFromInt(@divTrunc(textX, 64)));
-            const fy = @as(f32, @floatFromInt(@divTrunc(textY, 64)));
+            const fx = @as(f32, @floatFromInt(@divTrunc(textX, decimalPrecision)));
+            const fy = @as(f32, @floatFromInt(@divTrunc(textY, decimalPrecision)));
             const instance = try outputBuffer.addOne(self.allocator);
             instance.* = .{
                 .position = .{
