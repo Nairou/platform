@@ -665,9 +665,9 @@ const Font = struct {
     callbackData: CallbackFaceAllocator,
 
     const decimalPrecision = 1 << 6; // 26.6
-    const maxSubPixelValues = 4;
-    const subpixelBits = std.math.log2_int(u32, maxSubPixelValues);
-    const uSubpixel = std.meta.Int(.unsigned, subpixelBits);
+    const pixelSubdivision = 4; // 4x4 grid of offsets
+    const subpixelBits = std.math.log2_int(u32, pixelSubdivision);
+    const SubpixelSize = std.meta.Int(.unsigned, subpixelBits);
 
     pub fn create(allocator: std.mem.Allocator, fileName: [:0]const u8, pointSize: u32, dpi: u32) !*Font {
         // TODO: Error handling
@@ -728,10 +728,9 @@ const Font = struct {
             const glyphOffsetY = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / decimalPrecision;
             //std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
 
-            const subpixelDivisor = @as(u32, decimalPrecision) / maxSubPixelValues;
-            const subX: uSubpixel = @truncate(@abs(textX) / subpixelDivisor);
-            const subY: uSubpixel = @truncate(@abs(textY) / subpixelDivisor);
-            std.log.debug("uSubpixel = {}, subpixelBits = {}, subX = {d}, subY = {d}, subpixelDivisor = {d}", .{ uSubpixel, subpixelBits, subX, subY, subpixelDivisor });
+            const subpixelDivisor = @as(u32, decimalPrecision) / pixelSubdivision;
+            const subX: SubpixelSize = @truncate(@abs(textX) / subpixelDivisor);
+            const subY: SubpixelSize = @truncate(@abs(textY) / subpixelDivisor);
             const offsetIndex = @as(u16, subY) * subpixelBits + subX;
             //std.log.debug("Glyph {d}: id = {d}, textX = {d} ({d}), textY = {d} ({d})", .{ i, glyphId, textX, subX, textY, subY });
 
