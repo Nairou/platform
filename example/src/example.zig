@@ -12,17 +12,17 @@ pub const Color = packed struct {
     g: f32,
     b: f32,
     a: f32,
+
+    pub const transparent: Color = .{ .r = 0, .g = 0, .b = 0, .a = 0 };
 };
 
-pub const BoxInstance = packed struct {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    cornerRadius: f32,
-    fillColor: Color,
-    borderWidth: f32,
-    borderColor: Color,
+pub const BoxInstance = extern struct {
+    position: [2]i32,
+    size: [2]i32,
+    backgroundColor: Color = .transparent,
+    borderWidth: u32 = 0,
+    borderColor: Color = .transparent,
+    cornerRadius: u32 = 0,
 };
 
 pub const TextInstance = extern struct {
@@ -43,44 +43,43 @@ var gradient: f32 = 0;
 
 var boxVao: gl.VertexArray = undefined;
 var boxVbo: gl.Buffer = undefined;
-var boxBuffer: [12]f32 = [_]f32{
+var boxBuffer: [8]f32 = [_]f32{
     1,  -1,
     -1, -1,
     -1, 1,
-    -1, 1,
     1,  1,
-    1,  -1,
 };
 var boxInstanceVbo: gl.Buffer = undefined;
-var boxInstanceBuffer: [5]BoxInstance = [_]BoxInstance{
-    .{ .x = 200, .y = 200, .width = 300, .height = 200, .cornerRadius = 10, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 2, .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 } },
-    .{ .x = 400, .y = 400, .width = 50, .height = 500, .cornerRadius = 10, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 5, .borderColor = .{ .r = 0.75, .g = 0, .b = 0, .a = 1 } },
-    .{ .x = 800, .y = 300, .width = 50, .height = 50, .cornerRadius = 25, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 0, .borderColor = .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 } },
-    .{ .x = 800, .y = 350, .width = 50, .height = 50, .cornerRadius = 0, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 10, .borderColor = .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 } },
-    .{ .x = 800, .y = 600, .width = 50, .height = 50, .cornerRadius = 25, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 10, .borderColor = .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 } },
-};
+var boxInstanceBuffer: std.ArrayListUnmanaged(BoxInstance) = .empty;
+//var boxInstanceBuffer: [5]BoxInstance = [_]BoxInstance{
+//    .{ .x = 200, .y = 200, .width = 300, .height = 200, .cornerRadius = 10, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 1, .borderColor = .//{ .r = 1, .g = 1, .b = 1, .a = 1 } },
+//    .{ .x = 400, .y = 400, .width = 50, .height = 500, .cornerRadius = 0, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 5, .borderColor = .{ //.r = 0.75, .g = 0, .b = 0, .a = 1 } },
+//    .{ .x = 800, .y = 300, .width = 50, .height = 50, .cornerRadius = 25, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 0, .borderColor = .{ //.r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 } },
+//    .{ .x = 800, .y = 350, .width = 50, .height = 50, .cornerRadius = 0, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 10, .borderColor = .{ //.r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 } },
+//    .{ .x = 800, .y = 600, .width = 50, .height = 50, .cornerRadius = 25, .fillColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 }, .borderWidth = 10, .borderColor = .{ //.r = 0.5, .g = 0.5, .b = 0.5, .a = 0.5 } },
+//};
 var boxVertexShader: gl.Shader = undefined;
 var boxFragmentShader: gl.Shader = undefined;
 var boxShaderProgram: gl.Program = undefined;
 var boxUniformModelViewProj: ?u32 = undefined;
 var boxUniformWindowSize: ?u32 = undefined;
 
-var ftVao: gl.VertexArray = undefined;
-var ftVbo: gl.Buffer = undefined;
-var ftBuffer: [6]TempVertex = [_]TempVertex{
-    .{ .position = .{ 1424, 400 }, .texture = .{ 1, 0 } },
-    .{ .position = .{ 400, 400 }, .texture = .{ 0, 0 } },
-    .{ .position = .{ 400, 1424 }, .texture = .{ 0, 1 } },
-    .{ .position = .{ 400, 1424 }, .texture = .{ 0, 1 } },
-    .{ .position = .{ 1424, 1424 }, .texture = .{ 1, 1 } },
-    .{ .position = .{ 1424, 400 }, .texture = .{ 1, 0 } },
-};
-var ftVertexShader: gl.Shader = undefined;
-var ftFragmentShader: gl.Shader = undefined;
-var ftShaderProgram: gl.Program = undefined;
-var ftUniformModelViewProj: ?u32 = undefined;
-var ftUniformWindowSize: ?u32 = undefined;
-var ftUniformTextureSampler0: ?u32 = undefined;
+//var ftVao: gl.VertexArray = undefined;
+//var ftVbo: gl.Buffer = undefined;
+//var ftBuffer: [6]TempVertex = [_]TempVertex{
+//    .{ .position = .{ 1424, 400 }, .texture = .{ 1, 0 } },
+//    .{ .position = .{ 400, 400 }, .texture = .{ 0, 0 } },
+//    .{ .position = .{ 400, 1424 }, .texture = .{ 0, 1 } },
+//    .{ .position = .{ 400, 1424 }, .texture = .{ 0, 1 } },
+//    .{ .position = .{ 1424, 1424 }, .texture = .{ 1, 1 } },
+//    .{ .position = .{ 1424, 400 }, .texture = .{ 1, 0 } },
+//};
+//var ftVertexShader: gl.Shader = undefined;
+//var ftFragmentShader: gl.Shader = undefined;
+//var ftShaderProgram: gl.Program = undefined;
+//var ftUniformModelViewProj: ?u32 = undefined;
+//var ftUniformWindowSize: ?u32 = undefined;
+//var ftUniformTextureSampler0: ?u32 = undefined;
 
 var textVao: gl.VertexArray = undefined;
 var textVbo: gl.Buffer = undefined;
@@ -101,6 +100,7 @@ var textUniformTextureSampler0: ?u32 = undefined;
 
 var atlas: FontTextureAtlas = .{};
 var atlasTextureId: gl.Texture = undefined;
+var uiBuffer: std.ArrayListUnmanaged(VisualElement) = .empty;
 
 fn hbCallbackReferenceTables(face: ?*harfbuzz.c.hb_face_t, tag: harfbuzz.c.hb_tag_t, user_data: ?*anyopaque) callconv(.C) ?*harfbuzz.c.hb_blob_t {
     _ = face;
@@ -134,6 +134,8 @@ pub fn main() anyerror!void {
     _ = try platform.init(std.heap.page_allocator);
     defer platform.deinit();
 
+    var uiAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer uiAllocator.deinit();
     var fontAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer fontAllocator.deinit();
 
@@ -155,27 +157,33 @@ pub fn main() anyerror!void {
         boxVao.bind();
         boxVbo = gl.genBuffer();
         boxVbo.bind(gl.BufferTarget.array_buffer);
-        gl.bufferData(gl.BufferTarget.array_buffer, f32, boxBuffer[0..12], gl.BufferUsage.static_draw);
-        gl.enableVertexAttribArray(0);
-        gl.vertexAttribDivisor(0, 0);
-        gl.vertexAttribPointer(0, 2, gl.Type.float, false, 2 * @sizeOf(f32), 0);
+        gl.bufferData(gl.BufferTarget.array_buffer, f32, &boxBuffer, gl.BufferUsage.static_draw);
+        var vertexIndex: u32 = 0;
+        gl.enableVertexAttribArray(vertexIndex);
+        gl.vertexAttribDivisor(vertexIndex, 0);
+        gl.vertexAttribPointer(vertexIndex, 2, gl.Type.float, false, 2 * @sizeOf(f32), 0);
         boxInstanceVbo = gl.genBuffer();
         boxInstanceVbo.bind(gl.BufferTarget.array_buffer);
-        gl.enableVertexAttribArray(1);
-        gl.vertexAttribDivisor(1, 1);
-        gl.vertexAttribPointer(1, 4, gl.Type.float, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "x"));
-        gl.enableVertexAttribArray(2);
-        gl.vertexAttribDivisor(2, 1);
-        gl.vertexAttribPointer(2, 1, gl.Type.float, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "cornerRadius"));
-        gl.enableVertexAttribArray(3);
-        gl.vertexAttribDivisor(3, 1);
-        gl.vertexAttribPointer(3, 4, gl.Type.float, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "fillColor"));
-        gl.enableVertexAttribArray(4);
-        gl.vertexAttribDivisor(4, 1);
-        gl.vertexAttribPointer(4, 1, gl.Type.float, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "borderWidth"));
-        gl.enableVertexAttribArray(5);
-        gl.vertexAttribDivisor(5, 1);
-        gl.vertexAttribPointer(5, 4, gl.Type.float, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "borderColor"));
+        vertexIndex += 1;
+        gl.enableVertexAttribArray(vertexIndex);
+        gl.vertexAttribDivisor(vertexIndex, 1);
+        gl.vertexAttribPointer(vertexIndex, 4, gl.Type.int, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "position"));
+        vertexIndex += 1;
+        gl.enableVertexAttribArray(vertexIndex);
+        gl.vertexAttribDivisor(vertexIndex, 1);
+        gl.vertexAttribPointer(vertexIndex, 4, gl.Type.float, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "backgroundColor"));
+        vertexIndex += 1;
+        gl.enableVertexAttribArray(vertexIndex);
+        gl.vertexAttribDivisor(vertexIndex, 1);
+        gl.vertexAttribPointer(vertexIndex, 1, gl.Type.int, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "borderWidth"));
+        vertexIndex += 1;
+        gl.enableVertexAttribArray(vertexIndex);
+        gl.vertexAttribDivisor(vertexIndex, 1);
+        gl.vertexAttribPointer(vertexIndex, 4, gl.Type.float, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "borderColor"));
+        vertexIndex += 1;
+        gl.enableVertexAttribArray(vertexIndex);
+        gl.vertexAttribDivisor(vertexIndex, 1);
+        gl.vertexAttribPointer(vertexIndex, 1, gl.Type.int, false, @sizeOf(BoxInstance), @offsetOf(BoxInstance, "cornerRadius"));
 
         const glslFileBuffer =
             \\struct vertexData {
@@ -183,7 +191,7 @@ pub fn main() anyerror!void {
             \\    vec2 origin;
             \\    vec2 radius;
             \\    float cornerRadius;
-            \\    vec4 fillColor;
+            \\    vec4 backgroundColor;
             \\    float borderWidth;
             \\    vec4 borderColor;
             \\    //vec2 texture0;
@@ -197,10 +205,10 @@ pub fn main() anyerror!void {
             \\
             \\layout(location=0) in vec2 quad;
             \\layout(location=1) in vec4 box;
-            \\layout(location=2) in float cornerRadius;
-            \\layout(location=3) in vec4 fillColor;
-            \\layout(location=4) in float borderWidth;
-            \\layout(location=5) in vec4 borderColor;
+            \\layout(location=2) in vec4 backgroundColor;
+            \\layout(location=3) in float borderWidth;
+            \\layout(location=4) in vec4 borderColor;
+            \\layout(location=5) in float cornerRadius;
             \\
             \\out vertexData data;
             \\
@@ -210,10 +218,11 @@ pub fn main() anyerror!void {
             \\    data.origin = box.xy + data.radius;
             \\    data.position = data.origin + data.radius * quad;
             \\    vec2 pos = 2.0 * data.position / WindowSize - 1.0;
+            \\    pos.y *= -1;
             \\    gl_Position = vec4( pos, 0, 1 );
             \\
             \\    data.cornerRadius = cornerRadius;
-            \\    data.fillColor = fillColor;
+            \\    data.backgroundColor = backgroundColor;
             \\    data.borderWidth = borderWidth;
             \\    data.borderColor = borderColor;
             \\}
@@ -242,7 +251,7 @@ pub fn main() anyerror!void {
             \\{
             \\    float d = RoundedRectSDF( data.position, data.origin, data.radius, data.cornerRadius );
             \\    float b = abs( d ) - data.borderWidth;
-            \\    outColor = vec4(0,0,0,0);//data.borderWidth > 0.0 ? mix( data.fillColor, data.borderColor, 1.0 - smoothstep( 0.0, 0.9, max( 0.0, b + 0.5 )) ) : data.fillColor;
+            \\    outColor = data.borderWidth > 0.0 ? mix( data.backgroundColor, data.borderColor, 1.0 - smoothstep( 0.0, 0.9, max( 0.0, b + 0.5 )) ) : data.backgroundColor;
             \\    outColor.a = mix( 1.0, 0.0, smoothstep( 0.0, 1.0, max( 0.0, d + 0.5 )) );
             \\    //outColor.rgb *= 0.8 + 0.2 * cos( 300.0 * d );
             \\}
@@ -297,108 +306,110 @@ pub fn main() anyerror!void {
         boxUniformWindowSize = boxShaderProgram.uniformLocation("WindowSize");
     }
 
-    {
-        ftVao = gl.genVertexArray();
-        ftVao.bind();
-        ftVbo = gl.genBuffer();
-        ftVbo.bind(gl.BufferTarget.array_buffer);
-        gl.bufferData(gl.BufferTarget.array_buffer, TempVertex, &ftBuffer, gl.BufferUsage.static_draw);
-        gl.enableVertexAttribArray(0);
-        gl.vertexAttribPointer(0, 2, .float, false, @sizeOf(TempVertex), @offsetOf(TempVertex, "position"));
-        gl.enableVertexAttribArray(1);
-        gl.vertexAttribPointer(1, 2, .float, false, @sizeOf(TempVertex), @offsetOf(TempVertex, "texture"));
+    //{
+    //    ftVao = gl.genVertexArray();
+    //    ftVao.bind();
+    //    ftVbo = gl.genBuffer();
+    //    ftVbo.bind(gl.BufferTarget.array_buffer);
+    //    gl.bufferData(gl.BufferTarget.array_buffer, TempVertex, &ftBuffer, gl.BufferUsage.static_draw);
+    //    gl.enableVertexAttribArray(0);
+    //    gl.vertexAttribPointer(0, 2, .float, false, @sizeOf(TempVertex), @offsetOf(TempVertex, "position"));
+    //    gl.enableVertexAttribArray(1);
+    //    gl.vertexAttribPointer(1, 2, .float, false, @sizeOf(TempVertex), @offsetOf(TempVertex, "texture"));
 
-        const glslFileBuffer =
-            \\struct vertexData {
-            \\    vec2 texture;
-            \\};
-            \\
-            \\
-            \\#ifdef COMPILE_VERT
-            \\
-            \\
-            \\uniform ivec2 WindowSize;
-            \\
-            \\layout(location=0) in vec2 position;
-            \\layout(location=1) in vec2 texture;
-            \\
-            \\out vertexData data;
-            \\
-            \\void main()
-            \\{
-            \\    vec2 pos = 2.0 * position / WindowSize - 1.0;
-            \\    pos.y *= -1;
-            \\    gl_Position = vec4( pos, 0, 1 );
-            \\    data.texture = texture;
-            \\}
-            \\
-            \\
-            \\#endif
-            \\#ifdef COMPILE_FRAG
-            \\
-            \\
-            \\uniform sampler2D TextureSampler;
-            \\
-            \\in vertexData data;
-            \\
-            \\layout(location=0) out vec4 outColor;
-            \\
-            \\void main()
-            \\{
-            \\    vec4 t = texture( TextureSampler, data.texture );
-            \\    outColor = vec4( 1, 1, 1, t.r );
-            \\}
-            \\
-            \\
-            \\#endif
-        ;
+    //    const glslFileBuffer =
+    //        \\struct vertexData {
+    //        \\    vec2 texture;
+    //        \\};
+    //        \\
+    //        \\
+    //        \\#ifdef COMPILE_VERT
+    //        \\
+    //        \\
+    //        \\uniform ivec2 WindowSize;
+    //        \\
+    //        \\layout(location=0) in vec2 position;
+    //        \\layout(location=1) in vec2 texture;
+    //        \\
+    //        \\out vertexData data;
+    //        \\
+    //        \\void main()
+    //        \\{
+    //        \\    vec2 pos = 2.0 * position / WindowSize - 1.0;
+    //        \\    pos.y *= -1;
+    //        \\    gl_Position = vec4( pos, 0, 1 );
+    //        \\    data.texture = texture;
+    //        \\}
+    //        \\
+    //        \\
+    //        \\#endif
+    //        \\#ifdef COMPILE_FRAG
+    //        \\
+    //        \\
+    //        \\uniform sampler2D TextureSampler;
+    //        \\
+    //        \\in vertexData data;
+    //        \\
+    //        \\layout(location=0) out vec4 outColor;
+    //        \\
+    //        \\void main()
+    //        \\{
+    //        \\    vec4 t = texture( TextureSampler, data.texture );
+    //        \\    outColor = vec4( 1, 1, 1, t.r );
+    //        \\}
+    //        \\
+    //        \\
+    //        \\#endif
+    //    ;
 
-        var logBuffer: [4096]u8 = undefined;
-        var logBufferWrapper = std.heap.FixedBufferAllocator.init(&logBuffer);
-        const logBufferAllocator = logBufferWrapper.allocator();
+    //    var logBuffer: [4096]u8 = undefined;
+    //    var logBufferWrapper = std.heap.FixedBufferAllocator.init(&logBuffer);
+    //    const logBufferAllocator = logBufferWrapper.allocator();
 
-        // Vertex shader
-        ftVertexShader = gl.createShader(.vertex);
-        errdefer ftVertexShader.delete();
-        const vertSource = [_][]const u8{ "#version 450\n", "#define COMPILE_VERT\n", glslFileBuffer };
-        ftVertexShader.source(3, &vertSource);
-        ftVertexShader.compile();
-        if (ftVertexShader.get(.compile_status) == 0) {
-            const message = try ftVertexShader.getCompileLog(logBufferAllocator);
-            defer logBufferAllocator.free(message);
-            std.log.err("Error compiling vertex shader: {s}", .{message});
-            return error.ShaderCompile;
-        }
+    //    // Vertex shader
+    //    ftVertexShader = gl.createShader(.vertex);
+    //    errdefer ftVertexShader.delete();
+    //    const vertSource = [_][]const u8{ "#version 450\n", "#define COMPILE_VERT\n", glslFileBuffer };
+    //    ftVertexShader.source(3, &vertSource);
+    //    ftVertexShader.compile();
+    //    if (ftVertexShader.get(.compile_status) == 0) {
+    //        const message = try ftVertexShader.getCompileLog(logBufferAllocator);
+    //        defer logBufferAllocator.free(message);
+    //        std.log.err("Error compiling vertex shader: {s}", .{message});
+    //        return error.ShaderCompile;
+    //    }
 
-        // Fragment shader
-        ftFragmentShader = gl.createShader(.fragment);
-        errdefer ftFragmentShader.delete();
-        const fragSource = [_][]const u8{ "#version 450\n", "#define COMPILE_FRAG\n", glslFileBuffer };
-        ftFragmentShader.source(3, &fragSource);
-        ftFragmentShader.compile();
-        if (ftFragmentShader.get(.compile_status) == 0) {
-            const message = try ftFragmentShader.getCompileLog(logBufferAllocator);
-            defer logBufferAllocator.free(message);
-            std.log.err("Error compiling fragment shader: {s}", .{message});
-            return error.ShaderCompile;
-        }
+    //    // Fragment shader
+    //    ftFragmentShader = gl.createShader(.fragment);
+    //    errdefer ftFragmentShader.delete();
+    //    const fragSource = [_][]const u8{ "#version 450\n", "#define COMPILE_FRAG\n", glslFileBuffer };
+    //    ftFragmentShader.source(3, &fragSource);
+    //    ftFragmentShader.compile();
+    //    if (ftFragmentShader.get(.compile_status) == 0) {
+    //        const message = try ftFragmentShader.getCompileLog(logBufferAllocator);
+    //        defer logBufferAllocator.free(message);
+    //        std.log.err("Error compiling fragment shader: {s}", .{message});
+    //        return error.ShaderCompile;
+    //    }
 
-        // Shader program
-        ftShaderProgram = gl.createProgram();
-        ftShaderProgram.attach(ftVertexShader);
-        ftShaderProgram.attach(ftFragmentShader);
-        ftShaderProgram.link();
-        if (ftShaderProgram.get(.link_status) == 0) {
-            const message = try ftShaderProgram.getCompileLog(logBufferAllocator);
-            defer logBufferAllocator.free(message);
-            std.log.err("Error linking shader program: {s}", .{message});
-            return error.ShaderCompile;
-        }
+    //    // Shader program
+    //    ftShaderProgram = gl.createProgram();
+    //    ftShaderProgram.attach(ftVertexShader);
+    //    ftShaderProgram.attach(ftFragmentShader);
+    //    ftShaderProgram.link();
+    //    if (ftShaderProgram.get(.link_status) == 0) {
+    //        const message = try ftShaderProgram.getCompileLog(logBufferAllocator);
+    //        defer logBufferAllocator.free(message);
+    //        std.log.err("Error linking shader program: {s}", .{message});
+    //        return error.ShaderCompile;
+    //    }
 
-        ftUniformModelViewProj = ftShaderProgram.uniformLocation("ModelViewProj");
-        ftUniformWindowSize = ftShaderProgram.uniformLocation("WindowSize");
-        ftUniformTextureSampler0 = ftShaderProgram.uniformLocation("TextureSampler");
+    //    ftUniformModelViewProj = ftShaderProgram.uniformLocation("ModelViewProj");
+    //    ftUniformWindowSize = ftShaderProgram.uniformLocation("WindowSize");
+    //    ftUniformTextureSampler0 = ftShaderProgram.uniformLocation("TextureSampler");
+    //}
 
+    { // Texture atlas
         atlasTextureId = gl.genTexture();
         atlasTextureId.bind(.@"2d");
         gl.texParameter(.@"2d", .min_filter, gl.TextureParameterType(.min_filter).nearest);
@@ -527,8 +538,43 @@ pub fn main() anyerror!void {
         textUniformTextureSampler0 = textShaderProgram.uniformLocation("TextureSampler");
     }
 
+    try uiBuffer.append(uiAllocator.allocator(), .{
+        .position = .{ .x = 200, .y = 200 },
+        .size = .{ .width = .{ .fixed = 300 }, .height = .{ .fixed = 200 } },
+        .layout = .{
+            .backgroundColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 },
+            .borderWidth = 2,
+            .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
+            .cornerRadius = 3,
+        },
+    });
+    try uiBuffer.append(uiAllocator.allocator(), .{
+        .position = .{ .x = 500, .y = 400 },
+        .size = .{ .width = .{ .fixed = 100 }, .height = .{ .fixed = 100 } },
+        .layout = .{
+            .backgroundColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 },
+            .borderWidth = 2,
+            .borderColor = .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 1 },
+            .cornerRadius = 3,
+        },
+    });
+    try uiBuffer.append(uiAllocator.allocator(), .{
+        .position = .{ .x = 200, .y = 410 },
+        .size = .{ .width = .{ .fixed = 300 }, .height = .{ .fixed = 200 } },
+        .layout = .{
+            .backgroundColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 },
+            .borderWidth = 1,
+            .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
+            .cornerRadius = 0,
+        },
+    });
+
     const testFont1 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 48, 72);
     defer testFont1.free();
+    const testFont2 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 24, 72);
+    defer testFont2.free();
+    const testFont3 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 12, 72);
+    defer testFont3.free();
 
     draw(window.id);
 
@@ -545,13 +591,25 @@ pub fn main() anyerror!void {
                     const sampleText = try std.fmt.bufPrintZ(&sampleTextBuffer, "Hello, World! ... x = {d}, gradient = {d:.3}\nAnother line, which is also very long and can't fit on a single line\nThe End.", .{ sampleTextX, gradient });
                     try testFont1.shapeText(sampleText, sampleTextX, 100 * 64, &atlas, &textInstanceBuffer);
 
-                    const testFont2 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 24, 72);
-                    defer testFont2.free();
                     try testFont2.shapeText("Hello, World!", sampleTextX, 250 * 64, &atlas, &textInstanceBuffer);
 
-                    const testFont3 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 12, 72);
-                    defer testFont3.free();
                     try testFont3.shapeText("Hello, World!", sampleTextX, 280 * 64, &atlas, &textInstanceBuffer);
+
+                    boxInstanceBuffer.clearRetainingCapacity();
+                    for (uiBuffer.items, 0..) |element, index| {
+                        const position: Position = .{
+                            .x = if (index == 2) @intFromFloat(400.0 + @cos(gradient * 2.0) * 300) else element.position.x,
+                            .y = if (index == 2) @intFromFloat(700.0 + @sin(gradient * 2.0) * 300) else element.position.y,
+                        };
+                        try boxInstanceBuffer.append(uiAllocator.allocator(), .{
+                            .position = .{ position.x, position.y },
+                            .size = .{ element.size.width.fixed, element.size.height.fixed },
+                            .backgroundColor = element.layout.backgroundColor,
+                            .borderWidth = element.layout.borderWidth,
+                            .borderColor = element.layout.borderColor,
+                            .cornerRadius = element.layout.cornerRadius,
+                        });
+                    }
 
                     draw(window_refresh.window);
                 },
@@ -768,11 +826,42 @@ const Font = struct {
                 .texture = .{ @floatFromInt(slot.position[0]), @floatFromInt(slot.position[1]) },
                 .color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
             };
-            std.log.debug("Glyph instance: position = {d},{d} ({d},{d})", .{ instance.position[0], instance.position[1], textX, textY });
+            //std.log.debug("Glyph instance: position = {d},{d} ({d},{d})", .{ instance.position[0], instance.position[1], textX, textY });
             textX += glyphPos[i].x_advance;
             textY += glyphPos[i].y_advance;
         }
     }
+};
+
+const Orientation = enum {
+    horizontal,
+    vertical,
+};
+const Position = struct {
+    x: i32,
+    y: i32,
+};
+const SizePerAxis = union(enum) {
+    fit: void,
+    fixed: i32,
+    grow: void,
+    percent: f32,
+};
+const Size = struct {
+    width: SizePerAxis = .fit,
+    height: SizePerAxis = .fit,
+};
+const Layout = struct {
+    backgroundColor: Color = .transparent,
+    borderWidth: u32 = 0,
+    borderColor: Color = .transparent,
+    cornerRadius: u32 = 0,
+};
+const VisualElement = struct {
+    position: Position,
+    size: Size,
+    layout: Layout = .{},
+    children: std.ArrayListUnmanaged(VisualElement) = .empty,
 };
 
 fn draw(windowId: platform.WindowId) void {
@@ -792,10 +881,10 @@ fn draw(windowId: platform.WindowId) void {
 
             boxVao.bind();
             boxInstanceVbo.bind(gl.BufferTarget.array_buffer);
-            gl.bufferData(gl.BufferTarget.array_buffer, BoxInstance, boxInstanceBuffer[0..boxInstanceBuffer.len], gl.BufferUsage.dynamic_draw);
+            gl.bufferData(gl.BufferTarget.array_buffer, BoxInstance, boxInstanceBuffer.items, gl.BufferUsage.dynamic_draw);
             //gl.activeTexture(gl.TextureUnit.texture_0);
             //uiWhiteTexture.bind(gl.TextureTarget.@"2d");
-            gl.drawArraysInstanced(gl.PrimitiveType.triangles, 0, 6, boxInstanceBuffer.len);
+            gl.drawArraysInstanced(gl.PrimitiveType.triangle_fan, 0, 4, boxInstanceBuffer.items.len);
             //uiBuffer.vertexBuffer.usedCount = 0;
 
             gl.useProgram(textShaderProgram);
@@ -813,15 +902,15 @@ fn draw(windowId: platform.WindowId) void {
             atlasTextureId.bind(gl.TextureTarget.@"2d");
             gl.drawArraysInstanced(gl.PrimitiveType.triangle_fan, 0, 4, textInstanceBuffer.items.len);
 
-            gl.useProgram(ftShaderProgram);
-            gl.uniform2i(ftUniformWindowSize, @intCast(windowWidth), @intCast(windowHeight));
+            //gl.useProgram(ftShaderProgram);
+            //gl.uniform2i(ftUniformWindowSize, @intCast(windowWidth), @intCast(windowHeight));
 
-            ftVao.bind();
-            ftVbo.bind(gl.BufferTarget.array_buffer);
-            gl.uniform1i(ftUniformTextureSampler0, 0);
-            gl.activeTexture(gl.TextureUnit.texture_0);
-            atlasTextureId.bind(gl.TextureTarget.@"2d");
-            gl.drawArrays(gl.PrimitiveType.triangles, 0, 6);
+            //ftVao.bind();
+            //ftVbo.bind(gl.BufferTarget.array_buffer);
+            //gl.uniform1i(ftUniformTextureSampler0, 0);
+            //gl.activeTexture(gl.TextureUnit.texture_0);
+            //atlasTextureId.bind(gl.TextureTarget.@"2d");
+            //gl.drawArrays(gl.PrimitiveType.triangles, 0, 6);
         }
 
         window.swapBuffers();
