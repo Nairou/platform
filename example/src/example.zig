@@ -113,7 +113,6 @@ fn hbCallbackReferenceTables(face: ?*harfbuzz.c.hb_face_t, tag: harfbuzz.c.hb_ta
     if (freetype.c.FT_Load_Sfnt_Table(data.face, tag, 0, null, &length) != 0) {
         return null;
     }
-    std.log.debug("FT tag {d} length = {d}", .{ tag, length });
 
     const buffer = data.allocator.alloc(u8, length) catch return null;
 
@@ -252,7 +251,7 @@ pub fn main() anyerror!void {
             \\    float d = RoundedRectSDF( data.position, data.origin, data.radius, data.cornerRadius );
             \\    float b = abs( d ) - data.borderWidth;
             \\    outColor = data.borderWidth > 0.0 ? mix( data.backgroundColor, data.borderColor, 1.0 - smoothstep( 0.0, 0.9, max( 0.0, b + 0.5 )) ) : data.backgroundColor;
-            \\    outColor.a = mix( 1.0, 0.0, smoothstep( 0.0, 1.0, max( 0.0, d + 0.5 )) );
+            \\    outColor.a *= mix( 1.0, 0.0, smoothstep( 0.0, 1.0, max( 0.0, d + 0.5 )) );
             \\    //outColor.rgb *= 0.8 + 0.2 * cos( 300.0 * d );
             \\}
             \\
@@ -538,36 +537,59 @@ pub fn main() anyerror!void {
         textUniformTextureSampler0 = textShaderProgram.uniformLocation("TextureSampler");
     }
 
-    try uiBuffer.append(uiAllocator.allocator(), .{
-        .position = .{ .x = 200, .y = 200 },
-        .size = .{ .width = .{ .fixed = 300 }, .height = .{ .fixed = 200 } },
-        .layout = .{
-            .backgroundColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 },
-            .borderWidth = 2,
-            .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
-            .cornerRadius = 3,
-        },
-    });
-    try uiBuffer.append(uiAllocator.allocator(), .{
-        .position = .{ .x = 500, .y = 400 },
-        .size = .{ .width = .{ .fixed = 100 }, .height = .{ .fixed = 100 } },
-        .layout = .{
-            .backgroundColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 },
-            .borderWidth = 2,
-            .borderColor = .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 1 },
-            .cornerRadius = 3,
-        },
-    });
-    try uiBuffer.append(uiAllocator.allocator(), .{
-        .position = .{ .x = 200, .y = 410 },
-        .size = .{ .width = .{ .fixed = 300 }, .height = .{ .fixed = 200 } },
-        .layout = .{
-            .backgroundColor = .{ .r = 0.25, .g = 0.5, .b = 0.65, .a = 1 },
-            .borderWidth = 1,
-            .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
-            .cornerRadius = 0,
-        },
-    });
+    const element1 = try uiBuffer.addOne(uiAllocator.allocator());
+    element1.* = .{
+        .position = .{ 200, 200 },
+        //.sizing = .{ .width = .{ .fixed = 800 }, .height = .{ .fixed = 500 } },
+        //.sizing = .{ .width = .fit, .height = .{ .fixed = 220 } },
+        .sizing = .{ .width = .fit, .height = .fit },
+        //.orientation = .vertical,
+        .padding = Padding.all(10),
+        .childGap = 10,
+        .backgroundColor = .{ .r = 0.3468, .g = 0.5643, .b = 0.5745, .a = 1 },
+        .borderWidth = 0,
+        .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
+        .cornerRadius = 0,
+        .parent = element1,
+    };
+    const element1child1 = try element1.children.addOne(uiAllocator.allocator());
+    element1child1.* = .{
+        .sizing = .{ .width = .{ .fixed = 200 }, .height = .{ .fixed = 200 } },
+        .backgroundColor = .{ .r = 0.8959, .g = 0.3216, .b = 0.3251, .a = 1 },
+        .borderWidth = 0,
+        .borderColor = .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 1 },
+        .cornerRadius = 0,
+        .parent = element1,
+    };
+    const element1child2 = try element1.children.addOne(uiAllocator.allocator());
+    element1child2.* = .{
+        .sizing = .{ .width = .{ .fixed = 250 }, .height = .{ .fixed = 150 } },
+        .backgroundColor = .{ .r = 0.8767, .g = 0.5469, .b = 0.1847, .a = 1 },
+        .borderWidth = 0,
+        .borderColor = .{ .r = 0.5, .g = 0.5, .b = 0.5, .a = 1 },
+        .cornerRadius = 0,
+        .parent = element1,
+    };
+    const element2 = try uiBuffer.addOne(uiAllocator.allocator());
+    element2.* = .{
+        .position = .{ 200, 430 },
+        .sizing = .{ .width = .{ .fixed = 480 }, .height = .{ .fixed = 20 } },
+        .backgroundColor = .{ .r = 1.0, .g = 1.0, .b = 1.0, .a = 0.25 },
+        .borderWidth = 0,
+        .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
+        .cornerRadius = 0,
+        .parent = element2,
+    };
+    const element3 = try uiBuffer.addOne(uiAllocator.allocator());
+    element3.* = .{
+        .position = .{ 690, 200 },
+        .sizing = .{ .width = .{ .fixed = 20 }, .height = .{ .fixed = 220 } },
+        .backgroundColor = .{ .r = 1.0, .g = 1.0, .b = 1.0, .a = 0.25 },
+        .borderWidth = 0,
+        .borderColor = .{ .r = 1, .g = 1, .b = 1, .a = 1 },
+        .cornerRadius = 0,
+        .parent = element3,
+    };
 
     const testFont1 = try Font.create(fontAllocator.allocator(), "Roboto-Medium.ttf", 48, 72);
     defer testFont1.free();
@@ -595,20 +617,12 @@ pub fn main() anyerror!void {
 
                     try testFont3.shapeText("Hello, World!", sampleTextX, 280 * 64, &atlas, &textInstanceBuffer);
 
+                    for (uiBuffer.items) |*element| {
+                        try layoutElement(element, uiAllocator.allocator());
+                    }
                     boxInstanceBuffer.clearRetainingCapacity();
-                    for (uiBuffer.items, 0..) |element, index| {
-                        const position: Position = .{
-                            .x = if (index == 2) @intFromFloat(400.0 + @cos(gradient * 2.0) * 300) else element.position.x,
-                            .y = if (index == 2) @intFromFloat(700.0 + @sin(gradient * 2.0) * 300) else element.position.y,
-                        };
-                        try boxInstanceBuffer.append(uiAllocator.allocator(), .{
-                            .position = .{ position.x, position.y },
-                            .size = .{ element.size.width.fixed, element.size.height.fixed },
-                            .backgroundColor = element.layout.backgroundColor,
-                            .borderWidth = element.layout.borderWidth,
-                            .borderColor = element.layout.borderColor,
-                            .cornerRadius = element.layout.cornerRadius,
-                        });
+                    for (uiBuffer.items) |*element| {
+                        try drawElement(element, uiAllocator.allocator());
                     }
 
                     draw(window_refresh.window);
@@ -626,6 +640,57 @@ pub fn main() anyerror!void {
                 else => std.log.debug("Unknown event: {}", .{event}),
             }
         }
+    }
+}
+
+fn layoutElement(element: *VisualElement, allocator: std.mem.Allocator) !void {
+    const paddingX = element.padding.left + element.padding.right;
+    const paddingY = element.padding.top + element.padding.bottom;
+    var calculatedSize: [2]i32 = .{ paddingX, paddingY };
+
+    var currentPosition: [2]i32 = .{ element.position[0] + element.padding.left, element.position[1] + element.padding.top };
+    for (element.children.items) |*child| {
+        child.position = currentPosition;
+        try layoutElement(child, allocator);
+        if (element.orientation == .horizontal) {
+            currentPosition[0] += child.size[0] + element.childGap;
+            calculatedSize[0] += child.size[0];
+            calculatedSize[1] = @max(calculatedSize[1], child.size[1]);
+        } else {
+            currentPosition[1] += child.size[1] + element.childGap;
+            calculatedSize[0] = @max(calculatedSize[0], child.size[0]);
+            calculatedSize[1] += child.size[1];
+        }
+    }
+    calculatedSize[0] += element.padding.left + element.padding.right;
+    calculatedSize[1] += element.padding.top + element.padding.bottom;
+    if (element.orientation == .horizontal) {
+        calculatedSize[0] -= element.childGap;
+    } else {
+        calculatedSize[1] -= element.childGap;
+    }
+    element.size[0] = switch (element.sizing.width) {
+        .fit => calculatedSize[0],
+        .fixed => |value| value,
+        else => 0,
+    };
+    element.size[1] = switch (element.sizing.height) {
+        .fit => calculatedSize[1],
+        .fixed => |value| value,
+        else => 0,
+    };
+}
+fn drawElement(element: *VisualElement, allocator: std.mem.Allocator) !void {
+    try boxInstanceBuffer.append(allocator, .{
+        .position = element.position,
+        .size = element.size,
+        .backgroundColor = element.backgroundColor,
+        .borderWidth = element.borderWidth,
+        .borderColor = element.borderColor,
+        .cornerRadius = element.cornerRadius,
+    });
+    for (element.children.items) |*child| {
+        try drawElement(child, allocator);
     }
 }
 
@@ -659,28 +724,24 @@ const FontTextureAtlas = struct {
     }
 
     pub fn insertGlyph(self: *FontTextureAtlas, allocator: std.mem.Allocator, font: u64, glyph: u32, offsetIndex: u16, width: u16, height: u16, top: i16, left: i16) !Slot {
-        std.log.debug("Insert glyph {d}, width = {d}, height = {d}", .{ glyph, width, height });
         const slotWidth = width + 1;
         const slotHeight = ((height + 4) / 5) * 5 + 1;
         std.debug.assert(slotWidth < TextureSize);
         std.debug.assert(slotHeight < TextureSize);
         const key: Key = .{ .font = font, .glyph = glyph, .offsetIndex = offsetIndex };
         if (self.glyphMap.get(key)) |slot| {
-            std.log.debug("Already exists in atlas: font = {d}, glyph = {d}", .{ font, glyph });
             return slot;
         }
 
         var nextOffset: u16 = 0;
-        const slot = for (self.shelves.items, 0..) |*shelf, index| {
+        const slot = for (self.shelves.items) |*shelf| {
             std.debug.assert(shelf.offset == nextOffset);
             if (shelf.height >= slotHeight and shelf.remaining >= slotWidth) {
-                std.log.debug("Glyph height {d} will fit in shelf {d} height {d}", .{ slotHeight, index, shelf.height });
                 defer shelf.remaining -= slotWidth;
                 break Slot{ .position = .{ TextureSize - shelf.remaining, shelf.offset }, .size = .{ width, height }, .offset = .{ left, top } };
             }
             nextOffset += shelf.height;
         } else blk: {
-            std.log.debug("Glyph height {d} fit no shelves, adding new shelf, offset = {d}", .{ height, nextOffset });
             std.debug.assert(nextOffset <= TextureSize);
             if (TextureSize - nextOffset < slotHeight) {
                 return error.AtlasIsFull;
@@ -694,8 +755,6 @@ const FontTextureAtlas = struct {
             };
             break :blk Slot{ .position = .{ 0, shelf.offset }, .size = .{ width, height }, .offset = .{ left, top } };
         };
-
-        std.log.debug("Added to atlas: font = {d}, glyph = {d}, data = {}", .{ font, glyph, slot });
 
         try self.glyphMap.put(allocator, key, slot);
         return slot;
@@ -784,13 +843,11 @@ const Font = struct {
             const glyphId = glyphInfo[i].codepoint;
             const glyphOffsetX = @as(f32, @floatFromInt(glyphPos[i].x_offset)) / decimalPrecision;
             const glyphOffsetY = @as(f32, @floatFromInt(glyphPos[i].y_offset)) / decimalPrecision;
-            //std.log.debug("Glyph {d}: id = {d}, position = {d},{d}, offset = {d},{d}, advance = {d},{d}", .{ i, glyphId, xOffset, yOffset, xOffset, yOffset, xAdvance, yAdvance });
 
             const subpixelDivisor = @as(u32, decimalPrecision) / pixelSubdivision;
             const subX: SubpixelSize = @truncate(@abs(textX) / subpixelDivisor);
             const subY: SubpixelSize = @truncate(@abs(textY) / subpixelDivisor);
             const offsetIndex = @as(u16, subY) * subpixelBits + subX;
-            //std.log.debug("Glyph {d}: id = {d}, textX = {d} ({d}), textY = {d} ({d})", .{ i, glyphId, textX, subX, textY, subY });
 
             var delta: freetype.c.FT_Vector = .{ .x = @as(i32, subX) * subpixelDivisor, .y = @as(i32, subY) * subpixelDivisor };
             freetype.c.FT_Set_Transform(self.ftFace, null, &delta);
@@ -798,8 +855,6 @@ const Font = struct {
             const glyph = self.ftFace.*.glyph.*;
             const slot = textureAtlas.getGlyph(self.id, glyphId, offsetIndex) orelse blk: {
                 const slot = try textureAtlas.insertGlyph(self.allocator, self.id, glyphId, offsetIndex, @intCast(glyph.bitmap.width), @intCast(glyph.bitmap.rows), @intCast(glyph.bitmap_top), @intCast(glyph.bitmap_left));
-                std.log.debug("Atlas: slot = {}", .{slot});
-                std.log.debug("FT: advance = {d}, {d}", .{ glyph.advance.x, glyph.advance.y });
                 //gl.texSubImage2D(.@"2d", 0, 20, 20, @abs(glyph.bitmap.pitch), glyph.bitmap.rows, .red, .unsigned_byte, glyph.bitmap.buffer);
                 var source: usize = 0;
                 var destination: usize = @as(u32, slot.position[1]) * FontTextureAtlas.TextureSize + @as(u32, slot.position[0]);
@@ -826,7 +881,6 @@ const Font = struct {
                 .texture = .{ @floatFromInt(slot.position[0]), @floatFromInt(slot.position[1]) },
                 .color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
             };
-            //std.log.debug("Glyph instance: position = {d},{d} ({d},{d})", .{ instance.position[0], instance.position[1], textX, textY });
             textX += glyphPos[i].x_advance;
             textY += glyphPos[i].y_advance;
         }
@@ -837,39 +891,49 @@ const Orientation = enum {
     horizontal,
     vertical,
 };
-const Position = struct {
-    x: i32,
-    y: i32,
+const Padding = struct {
+    top: i32,
+    right: i32,
+    bottom: i32,
+    left: i32,
+
+    pub const none: Padding = .{ .top = 0, .right = 0, .bottom = 0, .left = 0 };
+
+    pub fn all(size: i32) Padding {
+        return .{ .top = size, .right = size, .bottom = size, .left = size };
+    }
 };
-const SizePerAxis = union(enum) {
-    fit: void,
-    fixed: i32,
-    grow: void,
-    percent: f32,
+const Sizing = struct {
+    width: SizingAlongAxis = .fit,
+    height: SizingAlongAxis = .fit,
+
+    const SizingAlongAxis = union(enum) {
+        fit: void,
+        fixed: i32,
+        grow: void,
+        percent: f32,
+    };
 };
-const Size = struct {
-    width: SizePerAxis = .fit,
-    height: SizePerAxis = .fit,
-};
-const Layout = struct {
+const VisualElement = struct {
+    position: [2]i32 = .{ 0, 0 },
+    size: [2]i32 = .{ 0, 0 },
+    sizing: Sizing = .{},
+    padding: Padding = .none,
+    childGap: i32 = 0,
     backgroundColor: Color = .transparent,
     borderWidth: u32 = 0,
     borderColor: Color = .transparent,
     cornerRadius: u32 = 0,
-};
-const VisualElement = struct {
-    position: Position,
-    size: Size,
-    layout: Layout = .{},
+    orientation: Orientation = .horizontal,
+    parent: *VisualElement,
     children: std.ArrayListUnmanaged(VisualElement) = .empty,
 };
 
 fn draw(windowId: platform.WindowId) void {
     if (platform.Window.fromId(windowId)) |window| {
         if (builtin.os.tag == .linux) {
-            const g = @abs(@cos(gradient));
-            const b = @abs(@sin(gradient));
-            gl.clearColor(0.0, g, b, 1.0);
+            const b = @abs(@cos(gradient)) * 0.2 + 0.15;
+            gl.clearColor(b, b, b, 1.0);
             gl.clear(.{ .color = true, .depth = true, .stencil = false });
 
             // UI instancing
